@@ -56,7 +56,7 @@ def veri_hazirla(sorgu, satirlar):
     """VERİ metni + Python'da hesaplanan toplam."""
     satirlar_metin = [satir_metni(s) for s in satirlar]
     toplam = None
-    if sorgu in ("ay_odemeleri", "gecikmis", "faturalar") and len(satirlar) > 1:
+    if sorgu in ("ay_odemeleri", "odenenler", "gecikmis", "faturalar") and len(satirlar) > 1:
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
         satirlar_metin.append(f"TOPLAM ({len(satirlar)} kayıt): {tl(toplam)}")
     return "\n".join(satirlar_metin), toplam
@@ -76,7 +76,8 @@ def sablon_cevap(sorgu, satirlar, toplam):
         return (f"En yakın ödeme: {s['tur']} ({donem_tr(s['donem'])}), {tl(s['tutar_tl'])}, "
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
     satirlar_metin = "; ".join(satir_metni(s)[2:] for s in satirlar)
-    on = {"gecikmis": "Gecikmiş ödemeniz var: ", "ay_odemeleri": f"{len(satirlar)} ödeme: "}.get(sorgu, "")
+    on = {"gecikmis": "Gecikmiş ödemeniz var: ", "ay_odemeleri": f"{len(satirlar)} ödeme: ",
+          "odenenler": f"{len(satirlar)} ödenmiş kayıt: "}.get(sorgu, "")
     son = f" Toplam: {tl(toplam)}." if toplam is not None else ""
     return f"{on}{satirlar_metin}.{son}"
 
@@ -154,6 +155,10 @@ def _kontrol():
         ("T05", "F002", "En yakın son ödeme tarihi hangisi?", ["17.11.2026", "107.718,74"]),
         ("T12", "F001", "Demo Yazılım'ın Ekim KDV tutarı ne kadar?", ["yalnızca kendi firmanızın"]),
         ("T13", "F002", "2025 Mart KDV'm ne kadardı?", ["kayıtlarınızda yok"]),
+        # Rana'nın denemede bulduğu hatalar (kalıcı test). "!" ile başlayan: cevapta OLMAMALI
+        ("EK1", "F002", "ekim ayında ödenen kdv tutarı nedir", ["86.213,86", "!37.209,75"]),
+        ("EK2", "F002", "bu ay ödenecek sgk primi ne kadar", ["112.957,88", "!70.803,47", "!107.718,74"]),
+        ("EK3", "F002", "Geçen ay neler ödedim?", ["208.990,62"]),
     ]
     gecen = 0
     for tid, firma, soru, beklenen in testler:
@@ -166,7 +171,8 @@ def _kontrol():
             n = niyet_belirle(soru)
             r = cevapla_kayit(soru, firma, n) if n["niyet"] == "kayit" else {"cevap": f"(niyet {n['niyet']})",
                                                                              "kaynaklar": [], "yontem": "-"}
-        ok = all(b.lower() in r["cevap"].lower() for b in beklenen)
+        c = r["cevap"].lower()
+        ok = all((b[1:].lower() not in c) if b.startswith("!") else (b.lower() in c) for b in beklenen)
         gecen += ok
         print(f"\n{'OK  ' if ok else 'HATA'} {tid} ({firma}, {time.time() - bas:.1f}s) {soru}")
         print(f"     cevap [{r['yontem']}]: {r['cevap']}")

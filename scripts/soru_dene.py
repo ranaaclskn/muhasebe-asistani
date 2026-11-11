@@ -51,7 +51,7 @@ def main():
                 print("    ", s)
             if not satirlar:
                 print("    (kayıt yok -> asistan çekimser kalacak: 'Bu bilgi kayıtlarınızda yok')")
-            elif n["sorgu"] in ("ay_odemeleri", "gecikmis") and len(satirlar) > 1:
+            elif n["sorgu"] in ("ay_odemeleri", "odenenler", "gecikmis") and len(satirlar) > 1:
                 print(f"    Python toplamı: {round(sum(s['tutar_tl'] for s in satirlar), 2)}")
         elif n["niyet"] == "belge":
             print("[2] RAG araması (ilk 3 parça, mesafe küçük = daha yakın):")

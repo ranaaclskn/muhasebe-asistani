@@ -23,13 +23,26 @@ SORGULAR = {
                   WHERE firma_id = :firma_id AND tur = :tur AND donem = :donem""",
     },
     "ay_odemeleri": {
-        "aciklama": "Bir ay içinde son tarihi olan ödenmemiş ödemeler (bu ay ne ödeyeceğim, toplam)",
+        "aciklama": "Bir ay içinde son tarihi olan ödenmemiş ödemeler (bu ay ne ödeyeceğim, toplam); "
+                    "tür söylenirse yalnızca o tür",
         "parametreler": ["ay"],  # ör. "2026-11"
+        "istege_bagli": ["tur"],  # verilmezse tüm türler
         "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum
                   FROM yukumlulukler
                   WHERE firma_id = :firma_id AND substr(son_odeme_tarihi, 1, 7) = :ay
-                        AND durum != 'Ödendi'
+                        AND durum != 'Ödendi' AND (:tur IS NULL OR tur = :tur)
                   ORDER BY son_odeme_tarihi""",
+    },
+    "odenenler": {
+        "aciklama": "Bir ay içinde ÖDENMİŞ ödemeler (ekim ayında ne ödedim, geçen ay ödenen KDV); "
+                    "tür söylenirse yalnızca o tür",
+        "parametreler": ["ay"],  # ödeme tarihinin ayı, ör. "2026-10"
+        "istege_bagli": ["tur"],
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum, odeme_tarihi
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND durum = 'Ödendi'
+                        AND substr(odeme_tarihi, 1, 7) = :ay AND (:tur IS NULL OR tur = :tur)
+                  ORDER BY odeme_tarihi""",
     },
     "gecikmis": {
         "aciklama": "Son tarihi geçmiş ve ödenmemiş (gecikmiş) ödemeler",
@@ -108,11 +121,15 @@ def calistir(sorgu_adi, firma_id, *parametreler):
     _firma_kontrol(firma_id)
     sorgu = SORGULAR[sorgu_adi]
     adlar = sorgu["parametreler"]
-    if len(parametreler) != len(adlar):
-        raise ValueError(f"{sorgu_adi} {len(adlar)} parametre bekler {adlar}, {len(parametreler)} geldi")
+    ek = sorgu.get("istege_bagli", [])
+    if not len(adlar) <= len(parametreler) <= len(adlar) + len(ek):
+        raise ValueError(f"{sorgu_adi} {len(adlar)} parametre bekler {adlar}"
+                         + (f" (+ isteğe bağlı {ek})" if ek else "") + f", {len(parametreler)} geldi")
 
-    degerler = dict(zip(adlar, parametreler))
-    if "tur" in degerler:
+    degerler = dict(zip(adlar + ek, parametreler))
+    for ad in ek:
+        degerler.setdefault(ad, None)  # isteğe bağlı verilmediyse filtre uygulanmaz
+    if degerler.get("tur") is not None:
         degerler["tur"] = tur_normalize(degerler["tur"]) or degerler["tur"]
     degerler["firma_id"] = firma_id  # modelden değil, koddan
     degerler["bugun"] = BUGUN
@@ -172,6 +189,16 @@ def _kontrol():
 
     s = calistir("en_yakin", "F002")
     yaz(s and s[0]["id"] == "Y040", f"en_yakin F002 -> {s[0]['id'] if s else None} {s[0]['son_odeme_tarihi'] if s else ''} (T05)")
+
+    s = calistir("ay_odemeleri", "F002", "2026-11", "sgk")
+    yaz([x["id"] for x in s] == ["Y038"], f"ay_odemeleri F002 2026-11 SGK -> {[x['id'] for x in s]} (yalnız SGK)")
+
+    s = calistir("odenenler", "F002", "2026-10", "KDV")
+    yaz([x["id"] for x in s] == ["Y033"] and s[0]["tutar_tl"] == 86213.86,
+        f"odenenler F002 2026-10 KDV -> {[(x['id'], x['tutar_tl'], x['odeme_tarihi']) for x in s]}")
+
+    s = calistir("odenenler", "F002", "2026-10")
+    yaz({x["id"] for x in s} == {"Y033", "Y034", "Y035"}, f"odenenler F002 2026-10 -> {[x['id'] for x in s]}")
 
     s = calistir("durum", "F002", "KDV", "2025-03")
     yaz(s == [], "durum F002 KDV 2025-03 -> 0 satır, yani çekimser kalınacak (T13)")
