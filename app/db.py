@@ -57,6 +57,24 @@ SORGULAR = {
                         AND substr(odeme_tarihi, 1, 4) = :yil AND (:tur IS NULL OR tur = :tur)
                   ORDER BY odeme_tarihi""",
     },
+    "odeme_araligi": {
+        "aciklama": "İki ay arasında (dahil) ödenmiş ödemeler ve toplamı (son 3 ayda ne ödedim, "
+                    "son 6 ayda ödenen KDV); tür söylenirse yalnızca o tür",
+        "parametreler": ["baslangic_ay", "bitis_ay"],  # ör. "2026-08", "2026-10"
+        "istege_bagli": ["tur"],
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum, odeme_tarihi
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND durum = 'Ödendi'
+                        AND substr(odeme_tarihi, 1, 7) BETWEEN :baslangic_ay AND :bitis_ay
+                        AND (:tur IS NULL OR tur = :tur)
+                  ORDER BY odeme_tarihi""",
+    },
+    "firma_bilgisi": {
+        "aciklama": "Firmanın kendi bilgileri: çalışan sayısı, sektör, firma türü, vergi no, unvan",
+        "parametreler": [],
+        "sql": """SELECT id, unvan, tur AS firma_turu, vergi_no, sektor, calisan_sayisi
+                  FROM firmalar WHERE id = :firma_id""",
+    },
     "gecikmis": {
         "aciklama": "Son tarihi geçmiş ve ödenmemiş (gecikmiş) ödemeler",
         "parametreler": [],

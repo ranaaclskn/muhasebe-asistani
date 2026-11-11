@@ -53,6 +53,8 @@ PARAMETRE KURALLARI:
 - "bu ay ödenecek KDV" gibi ay + tür sorularında tür, ay_odemeleri/odenenler'e 2. parametre olarak eklenir.
 - "ekim ayında ödenen / geçen ay ödediğim" -> "odenenler" (ödenmiş kayıtlar).
 - yil: "YYYY" biçiminde. "bu yıl ödediğim / bu yıl yapılan ödemeler" -> "yil_odenenler" ["2026"].
+- "son 3 ayda / son 6 ayda ödenen" -> "odeme_araligi" [başlangıç ayı, bitiş ayı]; bitiş = geçen ay (2026-10).
+- "kaç çalışan / sektörüm / vergi numaram" -> "firma_bilgisi" [].
 """
 
 # Few-shot örnekleri (test setindeki soruların birebir aynısı DEĞİL)
@@ -66,6 +68,8 @@ ORNEKLER = [
     ("Geçen ay neler ödedim?", {"niyet": "kayit", "sorgu": "odenenler", "parametreler": ["2026-10"]}),
     ("Bu yıl toplam ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]}),
     ("2026 yılında ödediğim KDV toplamı nedir?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026", "KDV"]}),
+    ("Son 6 ayda ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "odeme_araligi", "parametreler": ["2026-05", "2026-10"]}),
+    ("Firmamızda kaç çalışan kayıtlı?", {"niyet": "kayit", "sorgu": "firma_bilgisi", "parametreler": []}),
     ("Ödemesi geciken bir borcum var mı?", {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []}),
     ("Sıradaki ödemem ne zaman?", {"niyet": "kayit", "sorgu": "en_yakin", "parametreler": []}),
     ("KDV'leri en son ne zaman ödedim?", {"niyet": "kayit", "sorgu": "odeme_gecmisi", "parametreler": ["KDV"]}),
@@ -165,12 +169,18 @@ def kural_duzelt(soru, sonuc):
     1) Alan kelimesi geçen soru kapsam dışı olamaz -> belge.
     2) Soruda açıkça ay/yıl veya tür yazıyorsa parametreyi sorudan al (model ayı/yılı karıştırabiliyor)."""
     s = _kucuk(soru)
+    # Ücret/maaş tutarları veritabanında YOK, yalnızca MUHSGK beyannamelerinde (brüt ücret) var -> belge.
+    # (Aksi hâlde model muhtasar/SGK ödemelerini "ücret" diye sunuyordu.)
+    if re.search(r"ücret|maaş|bordro", s) and sonuc["niyet"] != "belge":
+        return {"niyet": "belge", "sorgu": None, "parametreler": [],
+                "duzeltme": f"ücret/maaş -> belge (model: {sonuc['niyet']})"}
     # Kesin kayıt kalıbı varsa model ne derse desin kayıt sorusudur (T04: model "belge" diyordu)
     kesin = _kesin_kayit(s)
     if kesin and sonuc["niyet"] != "kayit":
         ilk_niyet = sonuc["niyet"]
+        aralik = _son_n_ay(s) or (BUGUN[:7], BUGUN[:7])
         bos = {"ay": BUGUN[:7] if "geçen ay" not in s else _onceki_ay(BUGUN[:7]), "donem": "", "tur": "",
-               "yil": BUGUN[:4]}
+               "yil": BUGUN[:4], "baslangic_ay": aralik[0], "bitis_ay": aralik[1]}
         sonuc = {"niyet": "kayit", "sorgu": kesin,
                  "parametreler": [bos[a] for a in SORGULAR[kesin]["parametreler"]]}
         duzeltilmis = kural_duzelt(soru, sonuc)
@@ -187,8 +197,15 @@ def kural_duzelt(soru, sonuc):
 
     ay_ifadesi = re.search(r"ayında|ayı içinde|geçen ay|bu ay", s)
     tur_var = any(k in s for k, _ in _TUR_KELIMELERI)
+    aralik = _son_n_ay(s)
+    # "kaç kişi çalışıyor / sektörüm ne" -> firma bilgisi (yalnızca oturumdaki firma)
+    if _firma_kalibi(s):
+        sorgu, yeni = "firma_bilgisi", []
+    # "son 3 ayda ödenen" -> ay aralığını KOD hesaplar (model tek bir ay ya da tüm yıl seçiyordu)
+    elif aralik:
+        sorgu, yeni = "odeme_araligi", list(aralik)
     # "bu yıl yapılan ödemeler / 2026 yılında ödediğim" -> yıl içinde ödenmiş kayıtlar
-    if _yil_odeme_kalibi(s) and sorgu != "yil_odenenler":
+    elif _yil_odeme_kalibi(s) and sorgu != "yil_odenenler":
         sorgu, yeni = "yil_odenenler", [BUGUN[:4]]
     # "ekim ayında ödenen / geçen ay ödediğim" -> ödenmiş kayıtlar (ödeme tarihine göre)
     elif re.search(r"ödenen\b|ödedi|ödemiş", s) and ay_ifadesi and sorgu != "odenenler":
@@ -232,6 +249,10 @@ def _kesin_kayit(s):
         return None
     if re.search(r"gecik", s) and re.search(r"var mı|ödeme|borç", s):
         return "gecikmis"
+    if _firma_kalibi(s):
+        return "firma_bilgisi"
+    if _son_n_ay(s):
+        return "odeme_araligi"
     if _yil_odeme_kalibi(s):
         return "yil_odenenler"
     if re.search(r"ayında|ayı içinde|geçen ay|bu ay", s) and re.search(r"ödenen\b|ödedi|ödemiş", s):
@@ -243,6 +264,33 @@ def _kesin_kayit(s):
     if ay_var and tur_var and re.search(r"ne kadar|tutar|ödendi mi", s):
         return "durum"
     return None
+
+
+_SAYILAR = {"bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5, "altı": 6, "yedi": 7, "sekiz": 8,
+            "dokuz": 9, "on": 10, "on bir": 11, "on iki": 12}
+
+
+def _ay_ekle(ay, n):
+    """'2026-10' + (-2) -> '2026-08'"""
+    toplam = int(ay[:4]) * 12 + int(ay[5:7]) - 1 + n
+    return f"{toplam // 12}-{toplam % 12 + 1:02d}"
+
+
+def _son_n_ay(s):
+    """'son 3 ayda / son üç ay' + geçmiş zamanlı ödeme -> (başlangıç, bitiş) ayları, yoksa None.
+    Son N ay = içinde bulunduğumuz aydan önceki N TAM ay (bugün 2026-11 ise son 3 ay: 2026-08..2026-10)."""
+    m = re.search(r"son (\d{1,2}|on iki|on bir|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on) ay", s)
+    if not m or not re.search(r"ödenen|ödedi|ödemiş|yapılan|ödendi|ödeme", s):
+        return None
+    n = int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]
+    bitis = _onceki_ay(BUGUN[:7])
+    return (_ay_ekle(bitis, -(max(n, 1) - 1)), bitis)
+
+
+def _firma_kalibi(s):
+    """Firmanın kendi bilgisi soruluyor mu? (çalışan sayısı, sektör, vergi no, firma türü)"""
+    return bool((re.search(r"\bkaç\b", s) and re.search(r"çalış|personel|kişi", s))
+                or re.search(r"çalışan sayı|personel sayı|vergi no|vergi numara|sektör|firma türü|şirket türü", s))
 
 
 def _yil_odeme_kalibi(s):

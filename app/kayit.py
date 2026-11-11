@@ -56,14 +56,38 @@ def veri_hazirla(sorgu, satirlar):
     """VERİ metni + Python'da hesaplanan toplam."""
     satirlar_metin = [satir_metni(s) for s in satirlar]
     toplam = None
-    if sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "gecikmis", "faturalar") and len(satirlar) > 1:
+    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis", "faturalar")
+            and len(satirlar) > 1):
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
         satirlar_metin.append(f"TOPLAM ({len(satirlar)} kayıt): {tl(toplam)}")
     return "\n".join(satirlar_metin), toplam
 
 
-def sablon_cevap(sorgu, satirlar, toplam):
+def firma_cevabi(f):
+    return (f"{f['unvan']}: {f['firma_turu']}, {f['sektor']} sektörü, "
+            f"kayıtlı çalışan sayısı {f['calisan_sayisi']}, vergi no {f['vergi_no']}.")
+
+
+def _donem_basligi(sorgu, parametreler):
+    """Listenin hangi dönemi kapsadığını başlığa yaz ('Ağustos–Ekim 2026'da'): kullanıcı neye
+    baktığını görsün (önceden 'son üç ay' sorusuna yalnız Ağustos geliyor ve bu fark edilmiyordu)."""
+    p = parametreler or []
+    if sorgu in ("ay_odemeleri", "odenenler", "faturalar") and p:
+        return f"{donem_tr(p[0])} için "
+    if sorgu == "yil_odenenler" and p:
+        return f"{p[0]} yılında "
+    if sorgu == "odeme_araligi" and len(p) >= 2:
+        bas, bit = donem_tr(p[0]), donem_tr(p[1])
+        if bas.split()[-1] == bit.split()[-1]:  # aynı yıl: "Ağustos–Ekim 2026"
+            bas = bas.split()[0]
+        return f"{bas}–{bit} arasında "
+    return ""
+
+
+def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
     """Modelsiz, her zaman doğru cevap (model cevabı doğrulamadan geçemezse kullanılır)."""
+    if sorgu == "firma_bilgisi":
+        return firma_cevabi(satirlar[0])
     if sorgu == "durum" and len(satirlar) == 1:
         s = satirlar[0]
         if s["durum"] == "Ödendi":
@@ -76,13 +100,17 @@ def sablon_cevap(sorgu, satirlar, toplam):
         return (f"En yakın ödeme: {s['tur']} ({donem_tr(s['donem'])}), {tl(s['tutar_tl'])}, "
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
     # Birden fazla kayıt: okunaklı olsun diye ALT ALTA liste (Markdown; Streamlit madde olarak çizer)
+    n = len(satirlar)
     baslik = {"gecikmis": "Gecikmiş ödemeniz var:",
-              "ay_odemeleri": f"{len(satirlar)} ödeme bekliyor:",
-              "odenenler": f"{len(satirlar)} ödeme yapılmış:",
-              "yil_odenenler": f"{len(satirlar)} ödeme yapılmış (türe göre özet):",
+              "ay_odemeleri": f"{n} ödeme bekliyor:",
+              "odenenler": f"{n} ödeme yapılmış:",
+              "yil_odenenler": f"{n} ödeme yapılmış (türe göre özet):",
+              "odeme_araligi": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_gecmisi": "Son ödemeleriniz:",
-              "faturalar": f"{len(satirlar)} fatura:"}.get(sorgu, "Kayıtlarınız:")
-    if sorgu == "yil_odenenler":  # yıl boyunca çok kayıt olur -> türe göre grupla
+              "faturalar": f"{n} fatura:"}.get(sorgu, "Kayıtlarınız:")
+    baslik = _donem_basligi(sorgu, parametreler) + baslik
+    baslik = baslik[0].upper() + baslik[1:]
+    if sorgu in ("yil_odenenler", "odeme_araligi"):  # çok kayıt olur -> türe göre grupla
         gruplar = {}
         for s in satirlar:
             g = gruplar.setdefault(s["tur"], [0, 0.0])
@@ -143,13 +171,16 @@ def cevapla_kayit(soru, firma_id, niyet):
     satirlar = calistir(sorgu, firma_id, *parametreler)
     if not satirlar:  # Kural 4: model çağrılmaz
         return {"cevap": CEKIMSER, "kaynaklar": [], "satirlar": [], "yontem": "cekimser"}
+    if sorgu == "firma_bilgisi":  # yükümlülük değil, firma kartı: doğrudan şablon
+        return {"cevap": firma_cevabi(satirlar[0]), "kaynaklar": [f"firmalar:{firma_id}"],
+                "satirlar": satirlar, "yontem": "sablon"}
 
     veri, toplam = veri_hazirla(sorgu, satirlar)
     kaynaklar = [s["id"] for s in satirlar]
     if len(satirlar) > 1:
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
-        return {"cevap": sablon_cevap(sorgu, satirlar, toplam), "kaynaklar": kaynaklar,
+        return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,
                 "satirlar": satirlar, "yontem": "liste"}
     mesajlar = [("system", SISTEM), ("human", f"VERİ:\n{veri}\n\nSORU: {soru}")]
     cevap = llm().invoke(mesajlar).content.strip()
@@ -157,8 +188,9 @@ def cevapla_kayit(soru, firma_id, niyet):
     kontrol = cevap_dogrula(cevap, veri, satirlar, toplam)
     if kontrol["gecerli"]:
         return {"cevap": cevap, "kaynaklar": kaynaklar, "satirlar": satirlar, "yontem": "model"}
-    return {"cevap": sablon_cevap(sorgu, satirlar, toplam), "kaynaklar": kaynaklar, "satirlar": satirlar,
-            "yontem": "sablon", "reddedilen_model_cevabi": cevap, "uydurma": kontrol["uydurma"]}
+    return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,
+            "satirlar": satirlar, "yontem": "sablon", "reddedilen_model_cevabi": cevap,
+            "uydurma": kontrol["uydurma"]}
 
 
 # ---------- Kontrol ----------
@@ -180,6 +212,9 @@ def _kontrol():
         ("EK2", "F002", "bu ay ödenecek sgk primi ne kadar", ["112.957,88", "!70.803,47", "!107.718,74"]),
         ("EK3", "F002", "Geçen ay neler ödedim?", ["208.990,62"]),
         ("EK4", "F001", "bu yıl yapılan ödeme toplam kaç tl", ["643.278,61"]),
+        ("EK5", "F001", "son üç ay kaç tl vergi ödendi", ["422.451,46", "ağustos–ekim 2026"]),
+        ("EK6", "F001", "kaç kişi çalışıyor", ["24", "Demo Gıda"]),
+        ("EK7", "F002", "bünyemizde kaç firma çalışıyor", ["38", "!Demo Gıda"]),
     ]
     gecen = 0
     for tid, firma, soru, beklenen in testler:
