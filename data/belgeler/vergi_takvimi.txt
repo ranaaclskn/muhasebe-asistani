@@ -1,0 +1,18 @@
+VERGİ VE PRİM TAKVİMİ (DEMO REHBER)
+
+KDV beyannamesi: Aylık KDV beyannamesi, dönemi izleyen ayın 28'i akşamına kadar verilir ve aynı gün ödenir.
+Örnek: Eylül dönemi KDV beyannamesi 28 Ekim'e kadar verilir.
+
+Muhtasar ve prim hizmet beyannamesi (MUHSGK): Dönemi izleyen ayın 26'sına kadar verilir; muhtasar
+(gelir vergisi stopajı) da 26'sına kadar ödenir.
+
+SGK primi: Prim hizmet beyannamesiyle bildirilen SGK primi, dönemi izleyen ayın son gününe kadar ödenir.
+Örnek: Ekim ayı SGK primi 30 Kasım'a kadar ödenir.
+
+Geçici vergi: Üçer aylık dönemler halinde beyan edilir. Geçici vergi beyannamesi, dönemi izleyen
+ikinci ayın 17'si akşamına kadar verilir ve ödenir.
+Örnek: 2026/3 dönemi (Temmuz–Eylül) geçici vergisi 17 Kasım'a kadar ödenir.
+
+Son gün resmi tatile denk gelirse süre izleyen ilk iş gününe uzar.
+
+Uyarı: Bu takvim demo amaçlıdır. Resmi takvim için GİB ve SGK duyurularına bakın.

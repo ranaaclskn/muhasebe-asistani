@@ -1,0 +1,19 @@
+MUHTASAR VE PRİM HİZMET BEYANNAMESİ (MUHSGK) — Eylül 2026
+Mükellef: Demo Yazılım A.Ş. (Vergi No: 0000000002)
+Beyanname türü: Muhtasar ve prim hizmet beyannamesi, aylık
+Vergilendirme dönemi: Eylül 2026
+Bildirilen çalışan sayısı: 38
+
+Muhtasar (gelir vergisi stopajı) ödenecek tutar: 37.209,75 TL
+Muhtasar son ödeme tarihi: 26.10.2026
+
+SGK primi ödenecek tutar: 85.567,01 TL
+SGK primi son ödeme tarihi: 31.10.2026
+
+Toplam bildirilen (muhtasar + SGK primi): 122.776,76 TL
+
+Matrah özeti:
+- Brüt ücret toplamı: 248.065,00 TL
+- Prime esas kazanç toplamı: 228.178,69 TL
+
+Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: Y034, Y035)

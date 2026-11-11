@@ -1,0 +1,17 @@
+KDV, MUHTASAR VE SGK PRİMİ NEDİR? (DEMO REHBER)
+
+KDV (Katma Değer Vergisi): Mal ve hizmet satışlarında alınan vergidir. Firma, satışlarında hesapladığı
+KDV'den alışlarında ödediği KDV'yi (indirilecek KDV) düşer; aradaki fark ödenecek KDV'dir.
+Ödenecek KDV = Hesaplanan KDV − İndirilecek KDV.
+
+Muhtasar beyanname: İşverenin çalışanlarının ücretlerinden ve bazı ödemelerden kestiği gelir vergisi
+stopajını beyan ettiği beyannamedir. Bugün prim hizmet beyannamesiyle birleştirilmiş olarak
+"Muhtasar ve prim hizmet beyannamesi" (MUHSGK) adıyla verilir.
+
+SGK primi: Çalışanlar için Sosyal Güvenlik Kurumu'na ödenen sigorta primidir. İşçi payı ücretten
+kesilir, işveren payı işveren tarafından eklenir. Prime esas kazanç üzerinden hesaplanır.
+
+Geçici vergi: Kurumlar ve gelir vergisi mükelleflerinin yıl içinde üçer aylık kazançları üzerinden
+peşin ödedikleri vergidir; yıllık beyannamede hesaplanan vergiden mahsup edilir.
+
+Uyarı: Bu metin demo amaçlıdır; kesin bilgi için muhasebecinize danışın.

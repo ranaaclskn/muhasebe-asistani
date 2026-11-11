@@ -1,0 +1,15 @@
+KDV BEYANNAMESİ — Haziran 2026
+Mükellef: Demo Gıda Ltd. Şti. (Vergi No: 0000000001)
+Beyanname türü: Katma Değer Vergisi (KDV) beyannamesi, aylık
+Vergilendirme dönemi: Haziran 2026
+
+Ödenecek KDV: 37.083,71 TL
+Son ödeme tarihi: 28.07.2026
+
+Matrah ve hesaplama özeti:
+- Teslim ve hizmetlerin matrahı: 463.546,40 TL
+- Hesaplanan KDV (%20): 92.709,28 TL
+- İndirilecek KDV (alışlardan): 55.625,57 TL
+- Ödenecek KDV = Hesaplanan KDV − İndirilecek KDV = 37.083,71 TL
+
+Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: Y004)

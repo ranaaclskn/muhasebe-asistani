@@ -1,0 +1,15 @@
+KDV BEYANNAMESİ — Haziran 2026
+Mükellef: Demo Tekstil (Şahıs) (Vergi No: 0000000003)
+Beyanname türü: Katma Değer Vergisi (KDV) beyannamesi, aylık
+Vergilendirme dönemi: Haziran 2026
+
+Ödenecek KDV: 15.870,44 TL
+Son ödeme tarihi: 28.07.2026
+
+Matrah ve hesaplama özeti:
+- Teslim ve hizmetlerin matrahı: 198.380,50 TL
+- Hesaplanan KDV (%20): 39.676,10 TL
+- İndirilecek KDV (alışlardan): 23.805,66 TL
+- Ödenecek KDV = Hesaplanan KDV − İndirilecek KDV = 15.870,44 TL
+
+Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: Y044)

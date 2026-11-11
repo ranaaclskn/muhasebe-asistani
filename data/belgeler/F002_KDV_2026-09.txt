@@ -1,0 +1,15 @@
+KDV BEYANNAMESİ — Eylül 2026
+Mükellef: Demo Yazılım A.Ş. (Vergi No: 0000000002)
+Beyanname türü: Katma Değer Vergisi (KDV) beyannamesi, aylık
+Vergilendirme dönemi: Eylül 2026
+
+Ödenecek KDV: 86.213,86 TL
+Son ödeme tarihi: 28.10.2026
+
+Matrah ve hesaplama özeti:
+- Teslim ve hizmetlerin matrahı: 1.077.673,25 TL
+- Hesaplanan KDV (%20): 215.534,65 TL
+- İndirilecek KDV (alışlardan): 129.320,79 TL
+- Ödenecek KDV = Hesaplanan KDV − İndirilecek KDV = 86.213,86 TL
+
+Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: Y033)
