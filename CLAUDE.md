@@ -36,7 +36,7 @@ bilgilerini ve faturalarını doğal dilde sorgulayabildiği, yerel çalışan b
 ```
 KURULUM (bir kez)
   data/csv/*.csv ──> scripts/01_veritabani_kur.py ──> SQLite (data/muhasebe.db)
-  data/belgeler/*.txt ──> scripts/03_indeksle.py (chunk 420/80, bge-m3) ──> Chroma (data/chroma)
+  data/belgeler/*.txt ──> scripts/03_indeksle.py (chunk 200/40 token, embeddinggemma) ──> Chroma (data/chroma)
 
 SORU YOLU (her soruda)
   Streamlit firma paneli (soru + firma_id OTURUMDAN)
@@ -157,7 +157,7 @@ loglar(id INTEGER PK AUTOINCREMENT, kullanici_id INTEGER, firma_id TEXT, soru TE
 | 1 | 11 Kas | docker-compose (Ollama+n8n), venv, requirements, `ollama pull qwen2.5:7b bge-m3` | `curl localhost:11434/api/tags` iki modeli listeler; `localhost:5678` açılır |
 | 2 | 11 Kas | `01_veritabani_kur.py`: şema + CSV yükleme + bcrypt | `COUNT(*)` yukumlulukler=60; Y018 tutarı 54364.86; sifre_hash düz şifre değil |
 | 3 | 12 Kas | `02_belge_uret.py` + 4 ortak belge | 40 dosya var; F001_KDV_2026-09.txt "44.307,46" içerir |
-| 4 | 12 Kas | `03_indeksle.py`: Document + metadata {kaynak, firma_id, tur, donem}, RecursiveCharacterTextSplitter(420, 80), Chroma persist, deterministik id | "Eylül KDV" araması F001 filtresiyle ilk sırada F001_KDV_2026-09.txt; F002/F003 parçası yok; yeniden çalıştırınca kopya oluşmaz |
+| 4 | 12 Kas | `03_indeksle.py`: Document + metadata {kaynak, firma_id, tur, donem}, RecursiveCharacterTextSplitter.from_tiktoken_encoder(cl100k_base, 200/40 token — atölye d5_02 gibi), Chroma persist, deterministik id | "Eylül KDV" araması F001 filtresiyle ilk sırada F001_KDV_2026-09.txt; F002/F003 parçası yok; yeniden çalıştırınca kopya oluşmaz |
 | 5 | 13 Kas | `app/db.py`: SORGULAR = durum, ay_odemeleri, gecikmis, en_yakin, odeme_gecmisi (+ gerekirse fatura sorguları) | `calistir("ay_odemeleri","F001","2026-11%")` 4 satır, toplam 165469.58; F002 ile F001 verisi gelmez |
 | 6 | 13 Kas | `app/niyet.py`: few-shot prompt, `format="json"`, temperature 0, prompt'ta bugünün tarihi, 2 deneme, şema doğrulama | test_seti'nde ≥14/15 niyet doğru |
 | 7 | 13 Kas | `app/kayit.py` + `app/rag.py` + `app/dogrulama.py` (k=8 → lexical rerank → 3, kaynaklı cevap, atıf doğrulama; başarısızsa "emin olamadım") | T01–T07 doğru rakam/kaynak; T13 çekimser; T15 talimata uymaz |

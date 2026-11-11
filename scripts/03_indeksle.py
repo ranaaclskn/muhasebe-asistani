@@ -4,7 +4,7 @@ Kullanım (proje klasöründen):  python scripts/03_indeksle.py
 
 Atölye karşılığı:
   d5_01_documents.py -> belgeleri_yukle()  (metadata meta.json yerine belgeler tablosundan)
-  d5_02_chunks.py    -> parcala()           (420/80 karakter, deterministik chunk_id)
+  d5_02_chunks.py    -> parcala()           (200/40 TOKEN, cl100k_base, deterministik chunk_id)
   d5_04_index.py     -> indeksle()          (Chroma persist; aynı id = üzerine yazar, kopya oluşmaz)
   d5_05_search.py    -> kontrol()           (firma filtresiyle arama)
 """
@@ -16,7 +16,8 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app.config import BELGE_DIR, CHROMA_DIR, CHUNK_BOYUT, CHUNK_ORTUSME, DB_YOLU, EMBED_MODEL  # noqa: E402
+from app.config import (BELGE_DIR, CHROMA_DIR, CHUNK_BOYUT, CHUNK_ORTUSME, DB_YOLU,  # noqa: E402
+                        EMBED_MODEL, TOKENIZER)
 from app.rag import ara, vektor_deposu  # noqa: E402
 
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz",
@@ -51,7 +52,9 @@ def baslik(meta):
 
 
 def parcala(docs):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_BOYUT, chunk_overlap=CHUNK_ORTUSME)
+    # Atölye d5_02 ile aynı: boyut ve örtüşme TOKEN olarak ölçülür (karakter değil)
+    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        encoding_name=TOKENIZER, chunk_size=CHUNK_BOYUT, chunk_overlap=CHUNK_ORTUSME)
     parcalar = splitter.split_documents(docs)
     sayac = {}
     for p in parcalar:
@@ -113,7 +116,7 @@ def kontrol(depo, parcalar):
 if __name__ == "__main__":
     if not DB_YOLU.exists() or not any(BELGE_DIR.glob("*.txt")):
         sys.exit("Önce: python scripts/01_veritabani_kur.py && python scripts/02_belge_uret.py")
-    print(f"Embedding modeli: {EMBED_MODEL} | parça: {CHUNK_BOYUT}/{CHUNK_ORTUSME} karakter")
+    print(f"Embedding modeli: {EMBED_MODEL} | parça: {CHUNK_BOYUT}/{CHUNK_ORTUSME} token ({TOKENIZER})")
     print("İndeksleniyor (birkaç dakika sürebilir)...")
     depo, parcalar, silinen = indeksle()
     print(f"{len(parcalar)} parça kaydedildi -> {CHROMA_DIR}" + (f" ({silinen} eski parça silindi)" if silinen else ""))
