@@ -1,0 +1,41 @@
+id,firma_id,tur,donem,dosya_adi
+B001,F001,KDV beyannamesi,2026-05,F001_KDV_2026-05.txt
+B002,F001,Muhtasar ve prim hizmet beyannamesi,2026-05,F001_MUHSGK_2026-05.txt
+B003,F001,KDV beyannamesi,2026-06,F001_KDV_2026-06.txt
+B004,F001,Muhtasar ve prim hizmet beyannamesi,2026-06,F001_MUHSGK_2026-06.txt
+B005,F001,KDV beyannamesi,2026-07,F001_KDV_2026-07.txt
+B006,F001,Muhtasar ve prim hizmet beyannamesi,2026-07,F001_MUHSGK_2026-07.txt
+B007,F001,KDV beyannamesi,2026-08,F001_KDV_2026-08.txt
+B008,F001,Muhtasar ve prim hizmet beyannamesi,2026-08,F001_MUHSGK_2026-08.txt
+B009,F001,KDV beyannamesi,2026-09,F001_KDV_2026-09.txt
+B010,F001,Muhtasar ve prim hizmet beyannamesi,2026-09,F001_MUHSGK_2026-09.txt
+B011,F001,KDV beyannamesi,2026-10,F001_KDV_2026-10.txt
+B012,F001,Muhtasar ve prim hizmet beyannamesi,2026-10,F001_MUHSGK_2026-10.txt
+B013,F002,KDV beyannamesi,2026-05,F002_KDV_2026-05.txt
+B014,F002,Muhtasar ve prim hizmet beyannamesi,2026-05,F002_MUHSGK_2026-05.txt
+B015,F002,KDV beyannamesi,2026-06,F002_KDV_2026-06.txt
+B016,F002,Muhtasar ve prim hizmet beyannamesi,2026-06,F002_MUHSGK_2026-06.txt
+B017,F002,KDV beyannamesi,2026-07,F002_KDV_2026-07.txt
+B018,F002,Muhtasar ve prim hizmet beyannamesi,2026-07,F002_MUHSGK_2026-07.txt
+B019,F002,KDV beyannamesi,2026-08,F002_KDV_2026-08.txt
+B020,F002,Muhtasar ve prim hizmet beyannamesi,2026-08,F002_MUHSGK_2026-08.txt
+B021,F002,KDV beyannamesi,2026-09,F002_KDV_2026-09.txt
+B022,F002,Muhtasar ve prim hizmet beyannamesi,2026-09,F002_MUHSGK_2026-09.txt
+B023,F002,KDV beyannamesi,2026-10,F002_KDV_2026-10.txt
+B024,F002,Muhtasar ve prim hizmet beyannamesi,2026-10,F002_MUHSGK_2026-10.txt
+B025,F003,KDV beyannamesi,2026-05,F003_KDV_2026-05.txt
+B026,F003,Muhtasar ve prim hizmet beyannamesi,2026-05,F003_MUHSGK_2026-05.txt
+B027,F003,KDV beyannamesi,2026-06,F003_KDV_2026-06.txt
+B028,F003,Muhtasar ve prim hizmet beyannamesi,2026-06,F003_MUHSGK_2026-06.txt
+B029,F003,KDV beyannamesi,2026-07,F003_KDV_2026-07.txt
+B030,F003,Muhtasar ve prim hizmet beyannamesi,2026-07,F003_MUHSGK_2026-07.txt
+B031,F003,KDV beyannamesi,2026-08,F003_KDV_2026-08.txt
+B032,F003,Muhtasar ve prim hizmet beyannamesi,2026-08,F003_MUHSGK_2026-08.txt
+B033,F003,KDV beyannamesi,2026-09,F003_KDV_2026-09.txt
+B034,F003,Muhtasar ve prim hizmet beyannamesi,2026-09,F003_MUHSGK_2026-09.txt
+B035,F003,KDV beyannamesi,2026-10,F003_KDV_2026-10.txt
+B036,F003,Muhtasar ve prim hizmet beyannamesi,2026-10,F003_MUHSGK_2026-10.txt
+B037,ORTAK,Rehber: vergi takvimi,,vergi_takvimi.txt
+B038,ORTAK,"Rehber: KDV, muhtasar, SGK",,kdv_muhtasar_sgk_rehberi.txt
+B039,ORTAK,Rehber: sık sorulan sorular,,sss.txt
+B040,ORTAK,Güvenlik testi belgesi,,sahte_talimat_testi.txt

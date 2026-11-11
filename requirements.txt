@@ -1,0 +1,11 @@
+# Python 3.11+ (bu makinede 3.14 ile çalışıyor)
+langchain-core>=1.0,<2.0
+langchain-text-splitters>=1.0,<2.0
+langchain-ollama>=1.0,<2.0
+langchain-chroma>=1.0,<2.0
+langgraph>=1.0,<2.0
+streamlit>=1.50
+bcrypt>=4.0
+python-dotenv>=1.0
+requests>=2.31
+pytest>=8.0

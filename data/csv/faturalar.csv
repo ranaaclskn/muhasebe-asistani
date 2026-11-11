@@ -1,0 +1,25 @@
+id,firma_id,tip,karsi_taraf,tarih,tutar_tl,kdv_orani
+FT001,F001,Alış,Ege Un Sanayi (kurgusal),2026-09-09,38817.33,0.2
+FT002,F001,Satış,Kent Market Zinciri (kurgusal),2026-09-06,27237.67,0.1
+FT003,F001,Alış,Marmara Ambalaj (kurgusal),2026-09-21,32650.78,0.2
+FT004,F001,Satış,Lezzet Lokantası (kurgusal),2026-09-20,11407.5,0.1
+FT005,F001,Alış,Ege Un Sanayi (kurgusal),2026-10-02,55258.56,0.2
+FT006,F001,Satış,Kent Market Zinciri (kurgusal),2026-10-17,21486.41,0.1
+FT007,F001,Alış,Marmara Ambalaj (kurgusal),2026-10-09,17970.69,0.2
+FT008,F001,Satış,Lezzet Lokantası (kurgusal),2026-10-24,32453.7,0.1
+FT009,F002,Alış,Bulut Barındırma (kurgusal),2026-09-19,32770.37,0.2
+FT010,F002,Satış,Anadolu Lojistik (kurgusal),2026-09-22,52773.15,0.2
+FT011,F002,Alış,Ofis Kira Hizmetleri (kurgusal),2026-09-09,41012.75,0.2
+FT012,F002,Satış,Mavi Perakende (kurgusal),2026-09-18,28276.71,0.2
+FT013,F002,Alış,Bulut Barındırma (kurgusal),2026-10-02,42913.4,0.2
+FT014,F002,Satış,Anadolu Lojistik (kurgusal),2026-10-04,16288.8,0.2
+FT015,F002,Alış,Ofis Kira Hizmetleri (kurgusal),2026-10-20,10225.03,0.2
+FT016,F002,Satış,Mavi Perakende (kurgusal),2026-10-26,9612.61,0.2
+FT017,F003,Alış,İplik Tedarik (kurgusal),2026-09-10,11036.73,0.2
+FT018,F003,Satış,Moda Butik (kurgusal),2026-09-25,18642.66,0.2
+FT019,F003,Alış,Boya Kimya (kurgusal),2026-09-14,15140.2,0.2
+FT020,F003,Satış,Trend Giyim (kurgusal),2026-09-15,9714.38,0.2
+FT021,F003,Alış,İplik Tedarik (kurgusal),2026-10-27,12807.46,0.2
+FT022,F003,Satış,Moda Butik (kurgusal),2026-10-06,17940.73,0.2
+FT023,F003,Alış,Boya Kimya (kurgusal),2026-10-05,3610.07,0.2
+FT024,F003,Satış,Trend Giyim (kurgusal),2026-10-17,6688.78,0.2

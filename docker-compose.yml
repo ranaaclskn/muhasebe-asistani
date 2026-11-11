@@ -1,0 +1,16 @@
+# Ollama bu bilgisayarda zaten kurulu ve çalışıyor → burada yalnızca n8n var.
+# Docker yoksa alternatif: npx n8n
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Europe/Istanbul
+      - TZ=Europe/Istanbul
+    volumes:
+      - n8n_data:/home/node/.n8n
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # n8n'den bilgisayardaki servislere erişim
+volumes:
+  n8n_data:
