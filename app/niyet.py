@@ -58,6 +58,7 @@ ORNEKLER = [
     ("2024 Nisan SGK primim ne kadardı?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["SGK primi", "2024-04"]}),
     ("Temmuz KDV'mi hangi gün ödedim?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["KDV", "2026-07"]}),
     ("Aralıkta hangi ödemelerim var, toplam ne kadar?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-12"]}),
+    ("Bu ay neleri ödemem gerekiyor?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]}),
     ("Ödemesi geciken bir borcum var mı?", {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []}),
     ("Sıradaki ödemem ne zaman?", {"niyet": "kayit", "sorgu": "en_yakin", "parametreler": []}),
     ("KDV'leri en son ne zaman ödedim?", {"niyet": "kayit", "sorgu": "odeme_gecmisi", "parametreler": ["KDV"]}),
@@ -155,6 +156,11 @@ def kural_duzelt(soru, sonuc):
         return {**sonuc, "niyet": "belge", "duzeltme": "alan kelimesi -> belge"}
     if sonuc["niyet"] != "kayit":
         return sonuc
+
+    # "bu ay ... ödeyeceğim/ödemem" -> her zaman bu ayın ödenmemişleri
+    if re.search(r"\bbu ay", s) and re.search(r"öde(yece|me|necek)", s) and sonuc["sorgu"] != "ay_odemeleri":
+        return {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": [BUGUN[:7]],
+                "duzeltme": f"'bu ay' -> ay_odemeleri (model: {sonuc['sorgu']})"}
 
     adlar = SORGULAR[sonuc["sorgu"]]["parametreler"]
     yeni = list(sonuc["parametreler"])
