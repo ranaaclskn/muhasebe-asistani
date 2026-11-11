@@ -56,7 +56,9 @@ def veri_hazirla(sorgu, satirlar):
     """VERİ metni + Python'da hesaplanan toplam."""
     satirlar_metin = [satir_metni(s) for s in satirlar]
     toplam = None
-    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis", "faturalar")
+    # Faturalar burada YOK: alış (gider) ve satış (gelir) toplanırsa anlamsız bir rakam çıkar;
+    # onların ayrı toplamları sablon_cevap'ta hesaplanır.
+    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis")
             and len(satirlar) > 1):
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
         satirlar_metin.append(f"TOPLAM ({len(satirlar)} kayıt): {tl(toplam)}")
@@ -110,6 +112,10 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
               "faturalar": f"{n} fatura:"}.get(sorgu, "Kayıtlarınız:")
     baslik = _donem_basligi(sorgu, parametreler) + baslik
     baslik = baslik[0].upper() + baslik[1:]
+    if sorgu == "odeme_gecmisi":  # "en son ne zaman ödedim" -> asıl cevap ilk satırda, liste altta
+        s0 = satirlar[0]
+        baslik = (f"En son {s0['tur']} ödemeniz **{tarih_tr(s0['odeme_tarihi'])}** tarihinde yapıldı "
+                  f"({donem_tr(s0['donem'])} dönemi, {tl(s0['tutar_tl'])}).\n\n{baslik}")
     if sorgu in ("yil_odenenler", "odeme_araligi"):  # çok kayıt olur -> türe göre grupla
         gruplar = {}
         for s in satirlar:
@@ -120,7 +126,12 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
     else:
         maddeler = [satir_metni(s) for s in satirlar]  # satir_metni zaten "- " ile başlıyor
     metin = baslik + "\n\n" + "\n".join(maddeler)
-    if toplam is not None:
+    if sorgu == "faturalar":  # alış ve satış AYRI toplanır
+        for tip in ("Alış", "Satış"):
+            secili = [s for s in satirlar if s["tip"] == tip]
+            if secili:
+                metin += f"\n\n**{tip} toplamı: {tl(round(sum(s['tutar_tl'] for s in secili), 2))}** ({len(secili)} fatura)"
+    elif toplam is not None:
         metin += f"\n\n**Toplam: {tl(toplam)}**"
     return metin
 
@@ -215,6 +226,7 @@ def _kontrol():
         ("EK5", "F001", "son üç ay kaç tl vergi ödendi", ["422.451,46", "ağustos–ekim 2026"]),
         ("EK6", "F001", "kaç kişi çalışıyor", ["24", "Demo Gıda"]),
         ("EK7", "F002", "bünyemizde kaç firma çalışıyor", ["38", "!Demo Gıda"]),
+        ("EK8", "F001", "Ekim faturalarımı göster", ["73.229,25", "53.940,11", "!127.169,36"]),
     ]
     gecen = 0
     for tid, firma, soru, beklenen in testler:
