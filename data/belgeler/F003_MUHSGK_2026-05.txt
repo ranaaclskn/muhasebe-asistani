@@ -2,7 +2,7 @@ MUHTASAR VE PRİM HİZMET BEYANNAMESİ (MUHSGK) — Mayıs 2026
 Mükellef: Demo Tekstil (Şahıs) (Vergi No: 0000000003)
 Beyanname türü: Muhtasar ve prim hizmet beyannamesi, aylık
 Vergilendirme dönemi: Mayıs 2026
-Bildirilen çalışan sayısı: 9
+Çalışan sayısı: 9
 
 Muhtasar (gelir vergisi stopajı) ödenecek tutar: 6.828,63 TL
 Muhtasar son ödeme tarihi: 26.06.2026
@@ -10,7 +10,7 @@ Muhtasar son ödeme tarihi: 26.06.2026
 SGK primi ödenecek tutar: 22.287,99 TL
 SGK primi son ödeme tarihi: 30.06.2026
 
-Toplam bildirilen (muhtasar + SGK primi): 29.116,62 TL
+Muhtasar ve SGK primi toplamı: 29.116,62 TL
 
 Matrah özeti:
 - Brüt ücret toplamı: 45.524,20 TL

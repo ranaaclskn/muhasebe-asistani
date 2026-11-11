@@ -76,7 +76,7 @@ def muhsgk_metni(firma, donem, muh, sgk):
 Mükellef: {firma['unvan']} (Vergi No: {firma['vergi_no']})
 Beyanname türü: Muhtasar ve prim hizmet beyannamesi, aylık
 Vergilendirme dönemi: {donem_tr(donem)}
-Bildirilen çalışan sayısı: {firma['calisan_sayisi']}
+Çalışan sayısı: {firma['calisan_sayisi']}
 
 Muhtasar (gelir vergisi stopajı) ödenecek tutar: {tl(muhtasar)}
 Muhtasar son ödeme tarihi: {tarih_tr(muh_son)}
@@ -84,7 +84,7 @@ Muhtasar son ödeme tarihi: {tarih_tr(muh_son)}
 SGK primi ödenecek tutar: {tl(prim)}
 SGK primi son ödeme tarihi: {tarih_tr(sgk_son)}
 
-Toplam bildirilen (muhtasar + SGK primi): {tl(muhtasar + prim)}
+Muhtasar ve SGK primi toplamı: {tl(muhtasar + prim)}
 
 Matrah özeti:
 - Brüt ücret toplamı: {tl(brut_ucret)}

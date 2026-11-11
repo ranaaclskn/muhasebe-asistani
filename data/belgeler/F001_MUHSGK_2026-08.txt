@@ -2,7 +2,7 @@ MUHTASAR VE PRİM HİZMET BEYANNAMESİ (MUHSGK) — Ağustos 2026
 Mükellef: Demo Gıda Ltd. Şti. (Vergi No: 0000000001)
 Beyanname türü: Muhtasar ve prim hizmet beyannamesi, aylık
 Vergilendirme dönemi: Ağustos 2026
-Bildirilen çalışan sayısı: 24
+Çalışan sayısı: 24
 
 Muhtasar (gelir vergisi stopajı) ödenecek tutar: 19.272,94 TL
 Muhtasar son ödeme tarihi: 26.09.2026
@@ -10,7 +10,7 @@ Muhtasar son ödeme tarihi: 26.09.2026
 SGK primi ödenecek tutar: 72.083,59 TL
 SGK primi son ödeme tarihi: 30.09.2026
 
-Toplam bildirilen (muhtasar + SGK primi): 91.356,53 TL
+Muhtasar ve SGK primi toplamı: 91.356,53 TL
 
 Matrah özeti:
 - Brüt ücret toplamı: 128.486,27 TL
