@@ -10,6 +10,8 @@ import re
 import sqlite3
 from datetime import datetime
 
+import bcrypt
+
 from app.config import BUGUN, DB_YOLU
 
 # Her sorgu: açıklama (niyet prompt'unda modele gösterilecek), modelin vereceği parametre
@@ -42,6 +44,17 @@ SORGULAR = {
                   FROM yukumlulukler
                   WHERE firma_id = :firma_id AND durum = 'Ödendi'
                         AND substr(odeme_tarihi, 1, 7) = :ay AND (:tur IS NULL OR tur = :tur)
+                  ORDER BY odeme_tarihi""",
+    },
+    "yil_odenenler": {
+        "aciklama": "Bir YIL içinde ödenmiş ödemeler ve toplamı (bu yıl ne kadar ödedim, 2026'da ödenen KDV); "
+                    "tür söylenirse yalnızca o tür",
+        "parametreler": ["yil"],  # ödeme tarihinin yılı, ör. "2026"
+        "istege_bagli": ["tur"],
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum, odeme_tarihi
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND durum = 'Ödendi'
+                        AND substr(odeme_tarihi, 1, 4) = :yil AND (:tur IS NULL OR tur = :tur)
                   ORDER BY odeme_tarihi""",
     },
     "gecikmis": {
@@ -153,6 +166,79 @@ def talep_ekle(firma_id, talep_metni):
             (firma_id, talep_metni, datetime.now().isoformat(timespec="seconds")))
         con.commit()
         return cur.lastrowid
+    finally:
+        con.close()
+
+
+# ---------- Arayüz (Adım 9) için yardımcılar ----------
+def kullanici_dogrula(eposta, sifre):
+    """E-posta + şifre doğruysa kullanıcı bilgisini (sifre_hash HARİÇ) döndür, değilse None."""
+    con = baglan()
+    try:
+        k = con.execute(
+            "SELECT k.id, k.eposta, k.sifre_hash, k.rol, k.firma_id, k.ad, f.unvan "
+            "FROM kullanicilar k LEFT JOIN firmalar f ON f.id = k.firma_id "
+            "WHERE k.eposta = ?", (eposta.strip().lower(),)).fetchone()
+    finally:
+        con.close()
+    if k and bcrypt.checkpw(sifre.encode("utf-8"), k["sifre_hash"].encode("utf-8")):
+        kullanici = dict(k)
+        del kullanici["sifre_hash"]  # hash oturuma bile taşınmaz
+        return kullanici
+    return None
+
+
+def yukumlulukler(firma_id):
+    """Firmanın tüm yükümlülükleri (panel tablosu ve özet kartlar için)."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        return [dict(r) for r in con.execute(
+            "SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum, odeme_tarihi "
+            "FROM yukumlulukler WHERE firma_id = ? ORDER BY son_odeme_tarihi DESC", (firma_id,))]
+    finally:
+        con.close()
+
+
+def firma_talepleri(firma_id):
+    """Firmanın kendi talepleri ve durumları."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        return [dict(r) for r in con.execute(
+            "SELECT id, talep_metni, durum, olusturma_tarihi FROM talepler "
+            "WHERE firma_id = ? ORDER BY id DESC", (firma_id,))]
+    finally:
+        con.close()
+
+
+def bekleyen_talepler():
+    """Muhasebecinin onay kuyruğu: tüm firmaların 'Onay bekliyor' talepleri."""
+    con = baglan()
+    try:
+        return [dict(r) for r in con.execute(
+            "SELECT t.id, t.firma_id, f.unvan, t.talep_metni, t.olusturma_tarihi "
+            "FROM talepler t JOIN firmalar f ON f.id = t.firma_id "
+            "WHERE t.durum = 'Onay bekliyor' ORDER BY t.id")]
+    finally:
+        con.close()
+
+
+def talep_karar(talep_id, karar, karar_veren_id):
+    """Muhasebeci talebi onaylar/reddeder. Karar vereni DB'den doğrular (arayüze güvenmez).
+    Yalnızca 'Onay bekliyor' durumundaki talep değişir (iki kez onaylanamaz). True/False döner."""
+    if karar not in ("Onaylandı", "Reddedildi"):
+        raise ValueError(f"Geçersiz karar: {karar!r}")
+    con = baglan()
+    try:
+        rol = con.execute("SELECT rol FROM kullanicilar WHERE id = ?", (karar_veren_id,)).fetchone()
+        if not rol or rol["rol"] != "muhasebeci":
+            raise PermissionError("Talepleri yalnızca muhasebeci onaylayabilir")
+        cur = con.execute(
+            "UPDATE talepler SET durum = ?, onaylayan_id = ? WHERE id = ? AND durum = 'Onay bekliyor'",
+            (karar, karar_veren_id, talep_id))
+        con.commit()
+        return cur.rowcount == 1
     finally:
         con.close()
 

@@ -52,6 +52,7 @@ PARAMETRE KURALLARI:
 - Soruda belirli bir dönem ve tür varsa "durum" sorgusunu kullan.
 - "bu ay ödenecek KDV" gibi ay + tür sorularında tür, ay_odemeleri/odenenler'e 2. parametre olarak eklenir.
 - "ekim ayında ödenen / geçen ay ödediğim" -> "odenenler" (ödenmiş kayıtlar).
+- yil: "YYYY" biçiminde. "bu yıl ödediğim / bu yıl yapılan ödemeler" -> "yil_odenenler" ["2026"].
 """
 
 # Few-shot örnekleri (test setindeki soruların birebir aynısı DEĞİL)
@@ -63,6 +64,8 @@ ORNEKLER = [
     ("Aralıkta hangi ödemelerim var, toplam ne kadar?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-12"]}),
     ("Bu ay neleri ödemem gerekiyor?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]}),
     ("Geçen ay neler ödedim?", {"niyet": "kayit", "sorgu": "odenenler", "parametreler": ["2026-10"]}),
+    ("Bu yıl toplam ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]}),
+    ("2026 yılında ödediğim KDV toplamı nedir?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026", "KDV"]}),
     ("Ödemesi geciken bir borcum var mı?", {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []}),
     ("Sıradaki ödemem ne zaman?", {"niyet": "kayit", "sorgu": "en_yakin", "parametreler": []}),
     ("KDV'leri en son ne zaman ödedim?", {"niyet": "kayit", "sorgu": "odeme_gecmisi", "parametreler": ["KDV"]}),
@@ -133,9 +136,10 @@ def dogrula(cikti):
     # (ör. odenenler için ["KDV", "2026-10"] yazdı; beklenen ["2026-10", "KDV"]).
     donemler = [d for d in (_donem_normalize(x) for x in ham) if d]
     turler = [t for t in (tur_normalize(x) for x in ham if x) if t]
+    yillar = [str(x).strip() for x in ham if re.fullmatch(r"20\d{2}", str(x).strip())]
     temiz = []
     for ad in adlar:
-        havuz = turler if ad == "tur" else donemler
+        havuz = {"tur": turler, "yil": yillar}.get(ad, donemler)
         if not havuz:
             raise ValueError(f"geçersiz {ad}: {ham!r}")
         temiz.append(havuz.pop(0))
@@ -165,7 +169,8 @@ def kural_duzelt(soru, sonuc):
     kesin = _kesin_kayit(s)
     if kesin and sonuc["niyet"] != "kayit":
         ilk_niyet = sonuc["niyet"]
-        bos = {"ay": BUGUN[:7] if "geçen ay" not in s else _onceki_ay(BUGUN[:7]), "donem": "", "tur": ""}
+        bos = {"ay": BUGUN[:7] if "geçen ay" not in s else _onceki_ay(BUGUN[:7]), "donem": "", "tur": "",
+               "yil": BUGUN[:4]}
         sonuc = {"niyet": "kayit", "sorgu": kesin,
                  "parametreler": [bos[a] for a in SORGULAR[kesin]["parametreler"]]}
         duzeltilmis = kural_duzelt(soru, sonuc)
@@ -182,8 +187,11 @@ def kural_duzelt(soru, sonuc):
 
     ay_ifadesi = re.search(r"ayında|ayı içinde|geçen ay|bu ay", s)
     tur_var = any(k in s for k, _ in _TUR_KELIMELERI)
+    # "bu yıl yapılan ödemeler / 2026 yılında ödediğim" -> yıl içinde ödenmiş kayıtlar
+    if _yil_odeme_kalibi(s) and sorgu != "yil_odenenler":
+        sorgu, yeni = "yil_odenenler", [BUGUN[:4]]
     # "ekim ayında ödenen / geçen ay ödediğim" -> ödenmiş kayıtlar (ödeme tarihine göre)
-    if re.search(r"ödenen\b|ödedi|ödemiş", s) and ay_ifadesi and sorgu != "odenenler":
+    elif re.search(r"ödenen\b|ödedi|ödemiş", s) and ay_ifadesi and sorgu != "odenenler":
         sorgu, yeni = "odenenler", [gecen_ay if "geçen ay" in s else bu_ay]
     # "Ağustos KDV'sini ne zaman ödedim?" DÖNEM sorusudur (ödeme ayı değil) -> durum
     elif (sorgu == "odenenler" and not ay_ifadesi and tur_var
@@ -202,6 +210,8 @@ def kural_duzelt(soru, sonuc):
             yeni[i] = f"{yil.group(1) if yil else '2026'}-{ay_no:02d}"
         elif ad == "tur" and tur:
             yeni[i] = tur
+        elif ad == "yil":  # soruda yıl yazıyorsa o, "geçen yıl" ise bir önceki, yoksa bu yıl
+            yeni[i] = yil.group(1) if yil else str(int(BUGUN[:4]) - ("geçen yıl" in s))
 
     # İsteğe bağlı tür filtresi: soruda TEK ve AÇIK bir tür adı geçiyorsa uygula
     # ("vergi ve prim" gibi genel sorularda filtre yok; çıplak "prim" sayılmaz).
@@ -222,6 +232,8 @@ def _kesin_kayit(s):
         return None
     if re.search(r"gecik", s) and re.search(r"var mı|ödeme|borç", s):
         return "gecikmis"
+    if _yil_odeme_kalibi(s):
+        return "yil_odenenler"
     if re.search(r"ayında|ayı içinde|geçen ay|bu ay", s) and re.search(r"ödenen\b|ödedi|ödemiş", s):
         return "odenenler"
     if re.search(r"\bbu ay", s) and re.search(r"öde(yece|me|necek)", s):
@@ -231,6 +243,12 @@ def _kesin_kayit(s):
     if ay_var and tur_var and re.search(r"ne kadar|tutar|ödendi mi", s):
         return "durum"
     return None
+
+
+def _yil_odeme_kalibi(s):
+    """'bu yıl / geçen yıl / 2026 yılında' + geçmiş zamanlı ödeme ('yapılan', 'ödenen', 'ödediğim')."""
+    return bool(re.search(r"bu yıl|geçen yıl|yıl içinde|\b20\d{2} yılı", s)
+                and re.search(r"ödenen|ödedi|ödemiş|yapılan|ödendi|ödeme yaptı", s))
 
 
 def _onceki_ay(ay):

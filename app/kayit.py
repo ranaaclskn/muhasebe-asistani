@@ -56,7 +56,7 @@ def veri_hazirla(sorgu, satirlar):
     """VERİ metni + Python'da hesaplanan toplam."""
     satirlar_metin = [satir_metni(s) for s in satirlar]
     toplam = None
-    if sorgu in ("ay_odemeleri", "odenenler", "gecikmis", "faturalar") and len(satirlar) > 1:
+    if sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "gecikmis", "faturalar") and len(satirlar) > 1:
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
         satirlar_metin.append(f"TOPLAM ({len(satirlar)} kayıt): {tl(toplam)}")
     return "\n".join(satirlar_metin), toplam
@@ -75,11 +75,26 @@ def sablon_cevap(sorgu, satirlar, toplam):
         s = satirlar[0]
         return (f"En yakın ödeme: {s['tur']} ({donem_tr(s['donem'])}), {tl(s['tutar_tl'])}, "
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
-    satirlar_metin = "; ".join(satir_metni(s)[2:] for s in satirlar)
-    on = {"gecikmis": "Gecikmiş ödemeniz var: ", "ay_odemeleri": f"{len(satirlar)} ödeme: ",
-          "odenenler": f"{len(satirlar)} ödenmiş kayıt: "}.get(sorgu, "")
-    son = f" Toplam: {tl(toplam)}." if toplam is not None else ""
-    return f"{on}{satirlar_metin}.{son}"
+    # Birden fazla kayıt: okunaklı olsun diye ALT ALTA liste (Markdown; Streamlit madde olarak çizer)
+    baslik = {"gecikmis": "Gecikmiş ödemeniz var:",
+              "ay_odemeleri": f"{len(satirlar)} ödeme bekliyor:",
+              "odenenler": f"{len(satirlar)} ödeme yapılmış:",
+              "yil_odenenler": f"{len(satirlar)} ödeme yapılmış (türe göre özet):",
+              "odeme_gecmisi": "Son ödemeleriniz:",
+              "faturalar": f"{len(satirlar)} fatura:"}.get(sorgu, "Kayıtlarınız:")
+    if sorgu == "yil_odenenler":  # yıl boyunca çok kayıt olur -> türe göre grupla
+        gruplar = {}
+        for s in satirlar:
+            g = gruplar.setdefault(s["tur"], [0, 0.0])
+            g[0] += 1
+            g[1] += s["tutar_tl"]
+        maddeler = [f"- **{tur}**: {tl(round(t, 2))} ({n} ödeme)" for tur, (n, t) in gruplar.items()]
+    else:
+        maddeler = [satir_metni(s) for s in satirlar]  # satir_metni zaten "- " ile başlıyor
+    metin = baslik + "\n\n" + "\n".join(maddeler)
+    if toplam is not None:
+        metin += f"\n\n**Toplam: {tl(toplam)}**"
+    return metin
 
 
 # ---------- Model ----------
@@ -131,6 +146,11 @@ def cevapla_kayit(soru, firma_id, niyet):
 
     veri, toplam = veri_hazirla(sorgu, satirlar)
     kaynaklar = [s["id"] for s in satirlar]
+    if len(satirlar) > 1:
+        # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
+        # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
+        return {"cevap": sablon_cevap(sorgu, satirlar, toplam), "kaynaklar": kaynaklar,
+                "satirlar": satirlar, "yontem": "liste"}
     mesajlar = [("system", SISTEM), ("human", f"VERİ:\n{veri}\n\nSORU: {soru}")]
     cevap = llm().invoke(mesajlar).content.strip()
 
@@ -159,6 +179,7 @@ def _kontrol():
         ("EK1", "F002", "ekim ayında ödenen kdv tutarı nedir", ["86.213,86", "!37.209,75"]),
         ("EK2", "F002", "bu ay ödenecek sgk primi ne kadar", ["112.957,88", "!70.803,47", "!107.718,74"]),
         ("EK3", "F002", "Geçen ay neler ödedim?", ["208.990,62"]),
+        ("EK4", "F001", "bu yıl yapılan ödeme toplam kaç tl", ["643.278,61"]),
     ]
     gecen = 0
     for tid, firma, soru, beklenen in testler:
