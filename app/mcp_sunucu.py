@@ -14,7 +14,8 @@ Atölye karşılığı: d7_04_mcp_server.py (FastMCP("KampusDestek")).
 GÜVENLİK (Kural 2): Araçların hiçbirinde firma_id PARAMETRESİ YOKTUR. Firma, sunucu başlatılırken
 istemcinin verdiği MUHASEBE_FIRMA_ID ortam değişkeninden (oturumdan) okunur. Böylece aracı çağıran
 (model ya da başka bir uygulama) başka bir firmanın verisini isteyemez.
-Araçların hepsi SALT OKUNURDUR (Kural 5); yazma aracı onay token'ı ile ayrıca eklenecek.
+Okuma araçları SALT OKUNURDUR. Tek yazma aracı talep_gonder'dir ve yalnızca geçerli, tek kullanımlık
+insan onayı token'ıyla çalışır (Kural 5; atölye d7_04 talep_olustur + d7_store karşılığı, app/onay.py).
 """
 import json
 import logging
@@ -81,6 +82,18 @@ def belge_ara(soru: str, k: int = 3) -> str:
 
 
 @mcp.tool()
+def talep_gonder(talep_id: int, onay_token: str) -> str:
+    """YAZMA aracı: muhasebecinin ONAYLADIĞI talebi gönderime alır. Geçerli, tek kullanımlık insan
+    onayı token'ı olmadan çalışmaz; aynı talep ikinci kez gönderilmez (idempotent).
+    Token'ı yalnızca onaydan sonra güvenilir kod verir; model token üretmez/görmez."""
+    try:
+        from app.onay import talep_gonder as _gonder
+        return _json(_gonder(talep_id, onay_token, firma_id=_firma()))  # yalnızca oturumdaki firmanın talebi
+    except Exception as e:
+        return _json({"ok": False, "error": str(e)})
+
+
+@mcp.tool()
 def talep_durumu(talep_id: int) -> str:
     """Firmanın kendi talebinin durumunu sorgular (başka firmanın talebi görünmez)."""
     try:
@@ -99,7 +112,8 @@ if __name__ == "__main__":
     if "--http" in sys.argv:
         firma = _firma()  # firma oturumu yoksa sunucu hiç başlamaz
         print(f"MCP sunucusu çalışıyor: http://{MCP_HOST}:{MCP_PORT}/mcp | firma oturumu: {firma}\n"
-              "Araçlar: sorgu_listesi, kayit_sorgula, belge_ara, talep_durumu | Durdurmak için Ctrl + C",
+              "Araçlar: sorgu_listesi, kayit_sorgula, belge_ara, talep_durumu, talep_gonder (onaylı) "
+              "| Durdurmak için Ctrl + C",
               file=sys.stderr, flush=True)
         mcp.run(transport="streamable-http")
     else:
