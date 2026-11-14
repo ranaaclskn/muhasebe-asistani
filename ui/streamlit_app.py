@@ -15,6 +15,7 @@ from app.config import BUGUN  # noqa: E402
 from app.db import (bekleyen_talepler, firma_talepleri, kullanici_dogrula,  # noqa: E402
                     talep_karar, yukumlulukler)
 from app.kayit import donem_tr, tarih_tr, tl  # noqa: E402
+from app.onay import onay_ver, son_denetim, talep_gonder  # noqa: E402
 
 st.set_page_config(page_title="Muhasebe Asistanı", page_icon="📊", layout="wide")
 
@@ -93,8 +94,26 @@ def firma_paneli(k):
 
 
 # ---------- 3) MUHASEBECİ PANELİ ----------
+def onayla(talep_id, muhasebeci_id):
+    """İNSAN ONAYI -> tek kullanımlık token -> token'la gönderim (app/onay.py, atölye d7_store).
+    Token yalnızca bu güvenilir kodda üretilir ve hemen kullanılır; ekranda/modelde görünmez."""
+    try:
+        token = onay_ver(talep_id, muhasebeci_id)
+        sonuc = talep_gonder(talep_id, token)
+    except (PermissionError, ValueError) as e:
+        return ("error", f"#{talep_id} onaylanamadı: {e}")
+    if not sonuc["ok"]:
+        return ("error", f"#{talep_id} gönderime alınamadı: {sonuc['hata']}")
+    g = sonuc["gonderim"]
+    hedef = f" → {g['dosya']} · {g['eposta']}" if g.get("dosya") else ""
+    return ("success", f"#{talep_id} onaylandı ve gönderime alındı{hedef}")
+
+
 def muhasebeci_paneli(k):
     st.title("🧾 Onay kuyruğu")
+    mesaj = st.session_state.pop("onay_mesaji", None)  # st.rerun sonrası sonucu göster
+    if mesaj:
+        getattr(st, mesaj[0])(mesaj[1])
     talepler = bekleyen_talepler()
     if not talepler:
         st.info("Onay bekleyen talep yok.")
@@ -108,11 +127,20 @@ def muhasebeci_paneli(k):
                 st.write(t["talep_metni"])
             c1, c2, _ = st.columns([1, 1, 4])
             if c1.button("✅ Onayla", key=f"onay_{t['id']}"):
-                talep_karar(t["id"], "Onaylandı", k["id"])
+                st.session_state.onay_mesaji = onayla(t["id"], k["id"])
                 st.rerun()
             if c2.button("❌ Reddet", key=f"red_{t['id']}"):
                 talep_karar(t["id"], "Reddedildi", k["id"])
+                st.session_state.onay_mesaji = ("info", f"#{t['id']} reddedildi; hiçbir işlem yapılmadı.")
                 st.rerun()
+
+    with st.expander("🔎 Denetim kaydı (son 15 olay)"):
+        kayitlar = son_denetim(15)
+        if kayitlar:
+            st.dataframe([{"Talep": d["talep_id"], "Olay": d["olay"], "Ayrıntı": d["detay"], "Zaman": d["tarih"]}
+                          for d in kayitlar], hide_index=True, width="stretch")
+        else:
+            st.caption("Henüz kayıt yok.")
 
 
 # ---------- ANA AKIŞ ----------
