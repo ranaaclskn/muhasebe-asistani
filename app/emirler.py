@@ -115,7 +115,13 @@ def emir_cikar(soru):
         return {"emir": None, "alanlar": {}, "eksik": ["emir"],
                 "eksik_sorusu": "Ne yapmamı istersiniz? Örneğin: 'Eylül KDV beyannamemi e-postama gönder' "
                                 "veya 'Muhasebecimle görüşme talebi oluştur'."}
-    alanlar = alanlari_cikar(s) if EMIRLER[emir]["alanlar"] else {}
+    if emir == "planli_ekle":  # alanları KOD çıkarır; kullanıcı özeti görüp onaylar
+        aday = {"yon": yon_cikar(s), "tarih": tarih_cikar(s), "tutar_tl": tutar_cikar(s)}
+        alanlar = {k: v for k, v in aday.items() if v is not None}
+        alanlar["aciklama"] = re.sub(r"[,:\s]*\b(kaydet|kaydedin|ekle|ekleyin|not al|not et)\b[,:.\s]*",
+                                     " ", soru, flags=re.I).strip(" .,")[:200]
+    else:
+        alanlar = alanlari_cikar(s) if EMIRLER[emir]["alanlar"] else {}
     if emir == "gorusme_talebi":
         alanlar["konu"] = soru.strip()
     eksik = [a for a in EMIRLER[emir]["alanlar"] if a not in alanlar]

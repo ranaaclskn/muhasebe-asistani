@@ -136,6 +136,24 @@ def firma_paneli(k):
             st.write(s["cevap"])
             st.caption(kaynak)
         st.session_state.mesajlar.append({"rol": "assistant", "metin": s["cevap"], "kaynak": kaynak})
+        st.session_state.bekleyen_kayit = s.get("bekleyen_kayit")  # varsa onay butonları çıkar
+
+    b = st.session_state.get("bekleyen_kayit")
+    if b:  # KULLANICI ONAYI: kayıt ancak burada, butona basınca yazılır
+        c1, c2, _ = st.columns([1, 1, 4])
+        if c1.button("✅ Kaydet"):
+            try:
+                no = planli_islem_ekle(firma_id, k["id"], b["yon"], b["tarih"], b["tutar_tl"], b["aciklama"])
+                metin = f"✅ Kaydedildi (#{no}). “📅 Planlı ödeme ve tahsilatlarım” bölümünde görebilirsiniz."
+            except ValueError as e:
+                metin = f"Kaydedilemedi: {e}"
+            st.session_state.mesajlar.append({"rol": "assistant", "metin": metin})
+            st.session_state.bekleyen_kayit = None
+            st.rerun()
+        if c2.button("❌ Vazgeç"):
+            st.session_state.mesajlar.append({"rol": "assistant", "metin": "Tamam, kaydetmedim."})
+            st.session_state.bekleyen_kayit = None
+            st.rerun()
 
 
 # ---------- 3) MUHASEBECİ PANELİ ----------
