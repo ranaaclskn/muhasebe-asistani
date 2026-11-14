@@ -1,9 +1,15 @@
 """MCP Sunucusu: muhasebe asistanının araçlarını Model Context Protocol ile dışarı açar.
 
 Atölye karşılığı: d7_04_mcp_server.py (FastMCP("KampusDestek")).
-Bu dosya terminalde DOĞRUDAN çalıştırılıp okunacak bir program değildir; MCP istemcisi
-(app/mcp_istemci.py) onu stdio üzerinden kendisi başlatır ve konuşur.
-UYARI: Bu dosyada stdout'a print YAZMAYIN — MCP iletişimi stdout üzerinden yapılır, bozulur.
+
+İKİ ÇALIŞMA ŞEKLİ (transport):
+  1) stdio (varsayılan): İstemci (app/mcp_istemci.py) bu dosyayı KENDİSİ alt süreç olarak başlatır,
+     stdin/stdout üzerinden konuşur. Terminalde tek başına çalıştırılınca sessizce bekler.
+     UYARI: stdio modunda stdout'a print YAZMAYIN — MCP iletişimi stdout üzerinden yapılır, bozulur.
+  2) HTTP (streamable-http): Sunucu AYRI bir terminalde bir port dinler, istemci ona bağlanır:
+       Terminal 1:  MUHASEBE_FIRMA_ID=F001 python -m app.mcp_sunucu --http
+       Terminal 2:  python -m app.mcp_istemci --http
+     Adres: http://127.0.0.1:8765/mcp (yalnızca bu bilgisayar; 8000 FastAPI için boş bırakıldı)
 
 GÜVENLİK (Kural 2): Araçların hiçbirinde firma_id PARAMETRESİ YOKTUR. Firma, sunucu başlatılırken
 istemcinin verdiği MUHASEBE_FIRMA_ID ortam değişkeninden (oturumdan) okunur. Böylece aracı çağıran
@@ -14,12 +20,19 @@ import json
 import logging
 import os
 import re
+import sys
 
 from mcp.server.fastmcp import FastMCP
 
 from app.db import SORGULAR, baglan, calistir
 
-mcp = FastMCP("MuhasebeAsistani", log_level="WARNING")  # INFO satırları çıktıyı kalabalıklaştırmasın
+MCP_HOST, MCP_PORT = "127.0.0.1", 8765  # yalnızca yerel erişim; internete açılmaz
+
+mcp = FastMCP("MuhasebeAsistani", log_level="WARNING",  # INFO satırları çıktıyı kalabalıklaştırmasın
+              host=MCP_HOST, port=MCP_PORT,
+              # HTTP modunda: her istek bağımsız + düz JSON cevap. Açık kalan bildirim (SSE) kanalı
+              # olmadığı için istemci bağlantıyı kapatınca sunucu "ClosedResourceError" yazmaz.
+              stateless_http=True, json_response=True)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -83,4 +96,11 @@ def talep_durumu(talep_id: int) -> str:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")  # stdout'a print yazma: MCP iletişimi bozulur.
+    if "--http" in sys.argv:
+        firma = _firma()  # firma oturumu yoksa sunucu hiç başlamaz
+        print(f"MCP sunucusu çalışıyor: http://{MCP_HOST}:{MCP_PORT}/mcp | firma oturumu: {firma}\n"
+              "Araçlar: sorgu_listesi, kayit_sorgula, belge_ara, talep_durumu | Durdurmak için Ctrl + C",
+              file=sys.stderr, flush=True)
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run(transport="stdio")  # stdout'a print yazma: MCP iletişimi bozulur.
