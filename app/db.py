@@ -117,6 +117,14 @@ SORGULAR = {
                         AND (durum = 'Gecikti' OR (durum = 'Bekliyor' AND son_odeme_tarihi < :bugun))
                   ORDER BY son_odeme_tarihi""",
     },
+    "gec_odenenler": {  # 'gecikmis' ŞU ANKİ ödenmemiş borçtur; bu ise GEÇMİŞTE geç ÖDENMİŞ kayıtlardır
+        "aciklama": "Geçmişte son ödeme tarihinden SONRA (geç) ödenmiş ödemeler (gecikmiş ödediğim, geç ödenenler)",
+        "parametreler": [],
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum, odeme_tarihi
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND durum = 'Ödendi' AND odeme_tarihi > son_odeme_tarihi
+                  ORDER BY odeme_tarihi DESC""",
+    },
     "en_yakin": {
         "aciklama": "Bugünden sonraki en yakın son ödeme tarihi olan ödenmemiş ödeme",
         "parametreler": [],

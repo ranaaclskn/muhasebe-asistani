@@ -11,13 +11,16 @@ import re
 from langchain_ollama import ChatOllama
 
 from app.config import LLM_MODEL, OLLAMA_URL
-from app.db import calistir
+from app.db import calistir, planli_islemler
+from app.dogrulama import lexical_score
 
 CEKIMSER = "Bu bilgi kayıtlarınızda yok, muhasebecinize iletebilirim."
 _EKLE = " Firma panelindeki “📅 Planlı ödeme ve tahsilatlarım” bölümünden ekleyebilirsiniz."
 # Sonuç boşsa "bilgi yok" yerine söylenecek ANLAMLI cevap (boş sonuç da bilgidir):
 BOS_SONUC = {
     "gecikmis": "Kayıtlarınıza göre gecikmiş ödemeniz yok.",
+    "gec_odenenler": "Kayıtlarınıza göre geç ödenmiş bir ödemeniz yok; tüm ödemeler son ödeme tarihinde "
+                     "ya da öncesinde yapılmış.",
     "planli_odemeler": "Bu dönem için eklediğiniz planlı ödeme yok." + _EKLE,
     "beklenen_tahsilatlar": "Bu dönem için eklediğiniz beklenen tahsilat yok." + _EKLE,
     "nakit_plani": "Bu dönem için eklediğiniz planlı ödeme ya da tahsilat yok." + _EKLE,
@@ -124,6 +127,7 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
               "yil_odenenler": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_araligi": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_gecmisi": "Son ödemeleriniz:",
+              "gec_odenenler": f"{n} ödeme son tarihinden sonra (geç) yapılmış:",
               "faturalar": f"{n} fatura:",
               "planli_odemeler": f"{n} planlı ödemeniz var (sizin eklediğiniz kayıtlar):",
               "beklenen_tahsilatlar": f"{n} tahsilat bekleniyor (sizin eklediğiniz kayıtlar):",
@@ -197,6 +201,18 @@ def cevap_dogrula(cevap, veri, satirlar, toplam=None):
                and not re.search(r"ödenmedi|ödenmemiş|bekliyor|gecik", kucuk))
     return {"gecerli": bool(sayilar) and not uydurma and not celiski,
             "uydurma": uydurma + (["durum çelişkisi"] if celiski else [])}
+
+
+def planli_aciklama_cevabi(soru, firma_id, esik=0.6):
+    """Kullanıcının KENDİ eklediği kayıtlarda açıklamaya göre ara ('ev satın alma ücreti ne' ->
+    'Ev satın alma ücreti' kaydı). Sorunun anahtar kelimelerinin çoğu açıklamada geçmeli.
+    Eşleşme yoksa None (akış belge aramasına devam eder). Rakam SQL'den, model çağrılmaz."""
+    eslesen = [r for r in planli_islemler(firma_id) if lexical_score(soru, r["aciklama"]) >= esik]
+    if not eslesen:
+        return None
+    metin = "Eklediğiniz kayıtlarda bulduklarım:\n\n" + "\n".join(satir_metni(r) for r in eslesen)
+    return {"cevap": metin, "kaynaklar": [f"plan#{r['id']}" for r in eslesen], "satirlar": eslesen,
+            "yontem": "aciklama_arama"}
 
 
 def cevapla_kayit(soru, firma_id, niyet):

@@ -72,6 +72,12 @@ def kanit_eslestir(cevap, parcalar):
     sayilar = set(SAYI_DESENI.findall(cevap))
     tum_metin = " ".join(d.page_content for d in parcalar)
     uydurma = sorted(s for s in sayilar if s not in tum_metin)
+    # Yüzde ve düz sayılar da kanıt ister ("%15", "28'i"): önceden yalnız TL/tarih bakılıyordu ve
+    # bağlamda olmayan "%15" uydurması geçmişti. Tutar/tarihlerin içindeki parçalar ayrıca sayılmaz.
+    kalan = SAYI_DESENI.sub(" ", cevap)
+    for n in set(re.findall(r"\d+(?:[.,]\d+)?", kalan)):
+        if not re.search(rf"(?<![\d.,]){re.escape(n)}(?![\d]|[.,]\d)", tum_metin):
+            uydurma.append(n)
     en_iyi, en_puan = None, -1.0
     for d in parcalar:
         puan = 2 * sum(s in d.page_content for s in sayilar) + lexical_score(cevap, d.page_content)

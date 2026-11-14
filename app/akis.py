@@ -8,7 +8,7 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from app.db import belge_bul, kayitli_eposta, talep_ekle
-from app.kayit import cevapla_kayit, donem_tr, tarih_tr, tl
+from app.kayit import cevapla_kayit, donem_tr, planli_aciklama_cevabi, tarih_tr, tl
 from app.log import log_yaz
 from app.niyet import baska_firma_adi, niyet_belirle
 from app.rag import cevapla_belge
@@ -41,6 +41,10 @@ def sql_dugumu(d: Durum):
 
 
 def rag_dugumu(d: Durum):
+    # Önce kullanıcının KENDİ eklediği kayıtların açıklamalarında ara (ör. "ev satın alma ücreti ne")
+    kendi = planli_aciklama_cevabi(d["soru"], d["firma_id"])
+    if kendi:
+        return {"cevap": kendi["cevap"], "kaynaklar": kendi["kaynaklar"], "arac": "sql"}
     r = cevapla_belge(d["soru"], d["firma_id"])
     kaynak = [r["kanit"]["kaynak"]] if r["atif"] else []  # yalnızca cevapta kullanılan kaynak
     return {"cevap": r["cevap"], "kaynaklar": kaynak, "arac": "rag"}

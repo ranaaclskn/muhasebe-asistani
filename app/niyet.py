@@ -209,6 +209,10 @@ def kural_duzelt(soru, sonuc):
     # Kullanıcının kendi eklediği planlı ödeme / tahsilat soruları (ay aşağıda isteğe bağlı eklenir)
     if planli:
         sorgu, yeni = planli, []
+    elif _gec_odeme_kalibi(s):
+        sorgu, yeni = "gec_odenenler", []
+    elif _fatura_kalibi(s) and sorgu != "faturalar":  # ay aşağıda sorudan doldurulur
+        sorgu, yeni = "faturalar", [bu_ay]
     # "kaç kişi çalışıyor / sektörüm ne" -> firma bilgisi (yalnızca oturumdaki firma)
     elif _firma_kalibi(s):
         sorgu, yeni = "firma_bilgisi", []
@@ -264,8 +268,12 @@ def _kesin_kayit(s):
         return None
     if _planli_kalibi(s):
         return _planli_kalibi(s)
-    if re.search(r"gecik", s) and re.search(r"var mı|ödeme|borç", s):
+    if _gec_odeme_kalibi(s):  # geçmişte geç ÖDENMİŞ ("gecikmiş ödediğim", "...vardı")
+        return "gec_odenenler"
+    if re.search(r"gecik", s) and re.search(r"var mı|ödeme|borç", s):  # ŞU AN ödenmemiş
         return "gecikmis"
+    if _fatura_kalibi(s):
+        return "faturalar"
     if _firma_kalibi(s):
         return "firma_bilgisi"
     if _son_n_ay(s):
@@ -309,6 +317,16 @@ def _firma_kalibi(s):
     """Firmanın kendi bilgisi soruluyor mu? (çalışan sayısı, sektör, vergi no, firma türü)"""
     return bool((re.search(r"\bkaç\b", s) and re.search(r"çalış|personel|kişi", s))
                 or re.search(r"çalışan sayı|personel sayı|vergi no|vergi numara|sektör|firma türü|şirket türü", s))
+
+
+def _gec_odeme_kalibi(s):
+    """'gecikmiş ödediğim', 'geç ödenen', 'gecikmiş ödemem vardı' -> GEÇMİŞ. ('geç ödersem' değil.)"""
+    return bool(re.search(r"gecik|\bgeç\b", s) and re.search(r"ödedi|ödenmiş|ödenen|vardı|yapmışım", s))
+
+
+def _fatura_kalibi(s):
+    """'Ekim faturalarım', 'faturaları göster' -> faturalar. 'Fatura ödeyeceğim/tahsil' planlı kayıttır."""
+    return bool(re.search(r"fatura", s) and not re.search(r"beyan|ödeyece|ödenecek|alaca|tahsil", s))
 
 
 def _planli_kalibi(s):

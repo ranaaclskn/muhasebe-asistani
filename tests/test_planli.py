@@ -23,6 +23,8 @@ def gecici_db(tmp_path, monkeypatch):
     shutil.copy(KOK / "data" / "muhasebe.db", kopya)
     monkeypatch.setattr(db, "DB_YOLU", kopya)
     monkeypatch.setattr(db, "_SEMA_GUNCEL", False)  # yeni tablo kopyada da oluşsun
+    # Kullanıcının gerçek DB'ye eklediği kayıtlar testleri etkilemesin: kopyada temiz başla
+    db.baglan().execute("DELETE FROM planli_islemler").connection.commit()
 
 
 @pytest.fixture
