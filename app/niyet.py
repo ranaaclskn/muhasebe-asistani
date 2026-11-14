@@ -10,9 +10,9 @@ import json
 import re
 
 from langchain_ollama import ChatOllama
-
 from app.config import BUGUN, CSV_DIR, LLM_MODEL, OLLAMA_URL
 from app.db import SORGULAR, TURLER, baglan, tur_normalize
+from app.emirler import emir_cikar, emir_kalibi
 
 NIYETLER = ["kayit", "belge", "islem", "kapsam_disi"]
 AYLAR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz",
@@ -304,7 +304,7 @@ def _onceki_ay(ay):
     return f"{yil - 1}-12" if a == 1 else f"{yil}-{a - 1:02d}"
 
 
-def niyet_belirle(soru, temperature=0.0, deneme=2, duzelt=True):
+def _niyet_modelden(soru, temperature=0.0, deneme=2, duzelt=True):
     """Soruyu sınıflandır. 2 denemede de geçersizse güvenli varsayılan: belge (RAG çekimser kalabilir)."""
     hata = None
     for _ in range(deneme):
@@ -316,6 +316,19 @@ def niyet_belirle(soru, temperature=0.0, deneme=2, duzelt=True):
             hata = e
     varsayilan = {"niyet": "belge", "sorgu": None, "parametreler": [], "hata": str(hata)}
     return kural_duzelt(soru, varsayilan) if duzelt else varsayilan
+
+def niyet_belirle(soru, temperature=0.0, deneme=2, duzelt=True):
+    """Niyet (bilgi mi emir mi?) + emir isteminde emir ve alanları.
+    Bilgi istemi -> {'niyet': 'kayit'|'belge', 'sorgu', 'parametreler'}
+    Emir istemi  -> {'niyet': 'islem', 'emir', 'alanlar', 'eksik', 'eksik_sorusu'}"""
+    sonuc = _niyet_modelden(soru, temperature, deneme, duzelt)
+    # Emir kipindeki cümle ("... gönder", "... oluştur") model ne derse desin emirdir
+    if duzelt and emir_kalibi(soru) and sonuc["niyet"] != "islem":
+        sonuc = {"niyet": "islem", "sorgu": None, "parametreler": [],
+                 "duzeltme": f"emir kipi -> islem (model: {sonuc['niyet']})"}
+    if sonuc["niyet"] == "islem":
+        sonuc.update(emir_cikar(soru))  # hangi emir, hangi belge/dönem, eksik ne?
+    return sonuc
 
 
 def baska_firma_adi(soru, firma_id):
