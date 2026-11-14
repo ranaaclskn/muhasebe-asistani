@@ -7,8 +7,8 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.db import talep_ekle
-from app.kayit import cevapla_kayit
+from app.db import belge_bul, kayitli_eposta, talep_ekle
+from app.kayit import cevapla_kayit, donem_tr
 from app.log import log_yaz
 from app.niyet import baska_firma_adi, niyet_belirle
 from app.rag import cevapla_belge
@@ -46,8 +46,33 @@ def rag_dugumu(d: Durum):
 
 
 def talep_dugumu(d: Durum):
-    talep_id = talep_ekle(d["firma_id"], d["soru"])  # Kural 5: sadece KAYDET, dışarı bir şey gönderme
-    return {"cevap": f"Talebiniz muhasebecinize iletildi (talep no: {talep_id}). "
+    """EMİR İSTEMİ: eksik alan varsa sor (kayıt yok); tamsa özetle ve onaya kaydet.
+    Kural 5: burada dışarıya hiçbir şey gönderilmez, yalnızca 'Onay bekliyor' kaydı açılır."""
+    n, firma_id = d["niyet"], d["firma_id"]
+
+    # 1) Eksik bilgi -> kullanıcıya sor, talep AÇMA (atölye d7_06 'eksik_bilgi' düğümü)
+    if n.get("eksik"):
+        return {"cevap": f"Talebinizi oluşturabilmem için: {n['eksik_sorusu']}",
+                "kaynaklar": [], "arac": "talep_eksik"}
+
+    emir, alanlar = n["emir"], dict(n["alanlar"])
+    if emir == "belge_gonder":
+        belge = belge_bul(firma_id, alanlar["belge_turu"], alanlar["donem"])
+        if not belge:
+            return {"cevap": "İstediğiniz beyanname kayıtlarınızda bulunamadı; dönemi kontrol eder misiniz?",
+                    "kaynaklar": [], "arac": "talep_eksik"}
+        eposta = kayitli_eposta(firma_id)  # metindeki adres DEĞİL, kayıtlı adres
+        alanlar.update(dosya=belge["dosya_adi"], donem=belge["donem"], eposta=eposta)
+        ozet = (f"{donem_tr(belge['donem'])} {belge['tur']} ({belge['dosya_adi']}) "
+                f"kayıtlı e-posta adresinize ({eposta}) gönderilecek.")
+        if "@" in d["soru"]:  # metinde başka adres yazılmışsa açıkça söyle (o adres KULLANILMAZ)
+            ozet += " Güvenlik nedeniyle belgeler yalnızca kayıtlı adresinize gönderilir."
+    else:  # gorusme_talebi
+        ozet = f"Muhasebecinizle görüşme talebi: “{alanlar['konu']}”"
+
+    # 2) Özetle ve onaya kaydet (atölye d7_06: önce özet, sonra insan onayı)
+    talep_id = talep_ekle(firma_id, d["soru"], emir=emir, detay=alanlar, ozet=ozet)
+    return {"cevap": f"📨 Talebiniz muhasebecinize iletildi (talep no: {talep_id}).\n\n{ozet}\n\n"
                      "Muhasebeciniz onayladıktan sonra işlem yapılacak.",
             "kaynaklar": [f"talep:{talep_id}"], "arac": "talep"}
 

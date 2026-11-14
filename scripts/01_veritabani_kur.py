@@ -62,7 +62,10 @@ CREATE TABLE belgeler (
 CREATE TABLE talepler (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     firma_id TEXT NOT NULL,
-    talep_metni TEXT NOT NULL,
+    talep_metni TEXT NOT NULL,       -- kullanıcının yazdığı cümle (olduğu gibi)
+    emir TEXT NULL,                  -- EMIRLER menüsünden: belge_gonder | gorusme_talebi
+    detay TEXT NULL,                 -- JSON: emir alanları (belge_turu, donem, dosya, eposta...)
+    ozet TEXT NULL,                  -- muhasebecinin ne onayladığını gördüğü tek cümle
     durum TEXT DEFAULT 'Onay bekliyor',
     onaylayan_id INTEGER NULL REFERENCES kullanicilar(id),
     olusturma_tarihi TEXT

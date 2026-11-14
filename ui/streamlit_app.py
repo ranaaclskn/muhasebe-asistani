@@ -101,7 +101,11 @@ def muhasebeci_paneli(k):
     for t in talepler:
         with st.container(border=True):
             st.markdown(f"**#{t['id']} · {t['unvan']}** · {t['olusturma_tarihi']}")
-            st.write(t["talep_metni"])
+            if t.get("ozet"):  # muhasebeci NE onayladığını açıkça görür
+                st.markdown(f"📋 **{t['ozet']}**")
+                st.caption(f"Firmanın yazdığı: “{t['talep_metni']}”")
+            else:  # eski (emir bilgisi olmayan) talepler
+                st.write(t["talep_metni"])
             c1, c2, _ = st.columns([1, 1, 4])
             if c1.button("✅ Onayla", key=f"onay_{t['id']}"):
                 talep_karar(t["id"], "Onaylandı", k["id"])

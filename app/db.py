@@ -6,6 +6,7 @@ Kural 2 — firma_id her zaman KODDAN (oturumdan) gelir, modelden değil; her so
 
 Kontrol (proje klasöründen):  python -m app.db
 """
+import json
 import re
 import sqlite3
 from datetime import datetime
@@ -130,9 +131,25 @@ def tur_normalize(metin):
     return _TUR_ESLEME.get(anahtar)
 
 
+_SEMA_GUNCEL = False
+
+
+def _sema_guncelle(con):
+    """Eski veritabanlarına yeni talep kolonlarını ekle (01'i yeniden çalıştırmadan, veri kaybetmeden)."""
+    global _SEMA_GUNCEL
+    mevcut = {r[1] for r in con.execute("PRAGMA table_info(talepler)")}
+    for kolon in ("emir", "detay", "ozet"):
+        if mevcut and kolon not in mevcut:
+            con.execute(f"ALTER TABLE talepler ADD COLUMN {kolon} TEXT NULL")
+    con.commit()
+    _SEMA_GUNCEL = True
+
+
 def baglan():
     con = sqlite3.connect(DB_YOLU)
     con.row_factory = sqlite3.Row
+    if not _SEMA_GUNCEL:
+        _sema_guncelle(con)
     return con
 
 
@@ -173,17 +190,47 @@ def calistir(sorgu_adi, firma_id, *parametreler):
         con.close()
 
 
-def talep_ekle(firma_id, talep_metni):
-    """İşlem taleplerini 'Onay bekliyor' olarak kaydet (Kural 5: dış etki yok). Yeni id döner."""
+def talep_ekle(firma_id, talep_metni, emir=None, detay=None, ozet=None):
+    """İşlem taleplerini 'Onay bekliyor' olarak kaydet (Kural 5: dış etki yok). Yeni id döner.
+    emir/detay/ozet: emir isteminden çıkarılan, muhasebecinin onaylayacağı yapılandırılmış bilgi."""
     _firma_kontrol(firma_id)
     con = baglan()
     try:
         cur = con.execute(
-            "INSERT INTO talepler (firma_id, talep_metni, durum, olusturma_tarihi) "
-            "VALUES (?, ?, 'Onay bekliyor', ?)",
-            (firma_id, talep_metni, datetime.now().isoformat(timespec="seconds")))
+            "INSERT INTO talepler (firma_id, talep_metni, emir, detay, ozet, durum, olusturma_tarihi) "
+            "VALUES (?, ?, ?, ?, ?, 'Onay bekliyor', ?)",
+            (firma_id, talep_metni, emir, json.dumps(detay, ensure_ascii=False) if detay else None, ozet,
+             datetime.now().isoformat(timespec="seconds")))
         con.commit()
         return cur.lastrowid
+    finally:
+        con.close()
+
+
+def belge_bul(firma_id, belge_turu, donem):
+    """Firmanın beyannamesini bul. belge_turu: 'KDV' | 'MUHSGK'; donem: 'YYYY-AA' ya da 'son'.
+    Yalnızca oturumdaki firmanın belgeleri aranır (Kural 2). Bulamazsa None."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        r = con.execute(
+            "SELECT dosya_adi, donem, tur FROM belgeler "
+            "WHERE firma_id = ? AND dosya_adi LIKE ? AND (? = 'son' OR donem = ?) "
+            "ORDER BY donem DESC LIMIT 1",
+            (firma_id, f"{firma_id}_{belge_turu}_%", donem, donem)).fetchone()
+        return dict(r) if r else None
+    finally:
+        con.close()
+
+
+def kayitli_eposta(firma_id):
+    """Firma kullanıcısının KAYITLI e-postası. Belge asla kullanıcının yazdığı adrese gönderilmez."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        r = con.execute("SELECT eposta FROM kullanicilar WHERE firma_id = ? AND rol = 'firma' LIMIT 1",
+                        (firma_id,)).fetchone()
+        return r["eposta"] if r else None
     finally:
         con.close()
 
@@ -224,7 +271,7 @@ def firma_talepleri(firma_id):
     con = baglan()
     try:
         return [dict(r) for r in con.execute(
-            "SELECT id, talep_metni, durum, olusturma_tarihi FROM talepler "
+            "SELECT id, COALESCE(ozet, talep_metni) AS talep, durum, olusturma_tarihi FROM talepler "
             "WHERE firma_id = ? ORDER BY id DESC", (firma_id,))]
     finally:
         con.close()
@@ -235,7 +282,7 @@ def bekleyen_talepler():
     con = baglan()
     try:
         return [dict(r) for r in con.execute(
-            "SELECT t.id, t.firma_id, f.unvan, t.talep_metni, t.olusturma_tarihi "
+            "SELECT t.id, t.firma_id, f.unvan, t.talep_metni, t.emir, t.ozet, t.olusturma_tarihi "
             "FROM talepler t JOIN firmalar f ON f.id = t.firma_id "
             "WHERE t.durum = 'Onay bekliyor' ORDER BY t.id")]
     finally:
