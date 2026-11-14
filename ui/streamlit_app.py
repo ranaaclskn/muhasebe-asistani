@@ -12,8 +12,10 @@ import streamlit as st  # noqa: E402
 
 from app.akis import sor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
-from app.db import (bekleyen_talepler, firma_talepleri, kullanici_dogrula,  # noqa: E402
-                    talep_karar, yukumlulukler)
+from datetime import date  # noqa: E402
+
+from app.db import (YONLER, bekleyen_talepler, firma_talepleri, kullanici_dogrula,  # noqa: E402
+                    planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar, yukumlulukler)
 from app.kayit import donem_tr, tarih_tr, tl  # noqa: E402
 from app.onay import onay_ver, son_denetim, talep_gonder  # noqa: E402
 
@@ -40,6 +42,47 @@ def giris_ekrani():
             "Muhasebeci: `muhasebe@demo.local`")
 
 
+# ---------- 2a) KULLANICININ KENDİ EKLEDİĞİ PLANLI ÖDEME / TAHSİLATLAR ----------
+def planli_bolumu(k, firma_id):
+    """Form -> db.planli_islem_ekle (doğrulama orada) -> planli_islemler tablosu.
+    Eklenen kayıtlar sohbetten sorulabilir: 'Aralıkta planladığım ödemeler', 'tahsilat bekliyor muyum'."""
+    with st.expander("📅 Planlı ödeme ve tahsilatlarım"):
+        mesaj = st.session_state.pop("planli_mesaj", None)
+        if mesaj:
+            getattr(st, mesaj[0])(mesaj[1])
+        with st.form("planli_ekle", clear_on_submit=True):
+            yon = st.radio("Tür", list(YONLER), format_func=YONLER.get, horizontal=True)
+            c1, c2 = st.columns(2)
+            tarih = c1.date_input("Tarih", value=date.fromisoformat(BUGUN), format="DD.MM.YYYY")
+            tutar = c2.number_input("Tutar (TL)", min_value=0.0, step=100.0, format="%.2f")
+            aciklama = st.text_input("Açıklama", placeholder="ör. Aralık kirası, X müşterisi faturası")
+            karsi = st.text_input("Karşı taraf (isteğe bağlı)", placeholder="ör. Ev sahibi, ABC Ltd.")
+            if st.form_submit_button("➕ Ekle"):
+                try:
+                    no = planli_islem_ekle(firma_id, k["id"], yon, tarih.isoformat(), tutar, aciklama, karsi)
+                    st.session_state.planli_mesaj = ("success", f"Kayıt eklendi (#{no}). Artık sohbetten "
+                                                     "sorabilirsiniz.")
+                except ValueError as e:
+                    st.session_state.planli_mesaj = ("error", f"Eklenemedi: {e}")
+                st.rerun()
+
+        kayitlar = planli_islemler(firma_id)
+        if not kayitlar:
+            st.caption("Henüz kayıt eklemediniz.")
+            return
+        st.dataframe([{"#": r["id"], "Tür": YONLER[r["yon"]], "Tarih": tarih_tr(r["tarih"]),
+                       "Tutar": tl(r["tutar_tl"]), "Açıklama": r["aciklama"], "Karşı taraf": r["karsi_taraf"] or ""}
+                      for r in kayitlar], hide_index=True, width="stretch")
+        c1, c2 = st.columns([3, 1])
+        sec = c1.selectbox("Silinecek kayıt", [r["id"] for r in kayitlar],
+                           format_func=lambda i: next(f"#{r['id']} · {tarih_tr(r['tarih'])} · {r['aciklama']}"
+                                                      for r in kayitlar if r["id"] == i))
+        if c2.button("🗑️ Sil", width="stretch"):
+            planli_islem_sil(sec, firma_id)  # yalnızca kendi firmasının kaydı silinir
+            st.session_state.planli_mesaj = ("info", f"#{sec} silindi.")
+            st.rerun()
+
+
 # ---------- 2) FİRMA PANELİ ----------
 def firma_paneli(k):
     firma_id = k["firma_id"]  # Kural 2: firma_id OTURUMDAN; kullanıcı değiştiremez
@@ -64,6 +107,8 @@ def firma_paneli(k):
                        "Son ödeme": tarih_tr(s["son_odeme_tarihi"]), "Durum": s["durum"],
                        "Ödeme tarihi": tarih_tr(s["odeme_tarihi"])} for s in satirlar],
                      hide_index=True, width="stretch")
+
+    planli_bolumu(k, firma_id)
 
     with st.expander("📨 Taleplerim"):
         talepler = firma_talepleri(firma_id)

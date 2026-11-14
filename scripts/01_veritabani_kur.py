@@ -83,6 +83,18 @@ CREATE TABLE loglar (
     tarih TEXT
 );
 -- Sık kullanılan filtre: her sorgu firma_id ile başlar
+CREATE TABLE planli_islemler (      -- kullanıcının KENDİ eklediği planlı ödeme / tahsilatlar
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firma_id TEXT NOT NULL REFERENCES firmalar(id),
+    yon TEXT NOT NULL CHECK (yon IN ('Gider', 'Gelir')),
+    tarih TEXT NOT NULL,
+    tutar_tl REAL NOT NULL CHECK (tutar_tl > 0),
+    aciklama TEXT NOT NULL,
+    karsi_taraf TEXT,
+    ekleyen_id INTEGER,
+    olusturma TEXT
+);
+CREATE INDEX ix_planli_firma ON planli_islemler(firma_id, tarih);
 CREATE INDEX ix_yuk_firma ON yukumlulukler(firma_id, son_odeme_tarihi);
 CREATE INDEX ix_fat_firma ON faturalar(firma_id, tarih);
 """

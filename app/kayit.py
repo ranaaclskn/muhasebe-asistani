@@ -14,6 +14,14 @@ from app.config import LLM_MODEL, OLLAMA_URL
 from app.db import calistir
 
 CEKIMSER = "Bu bilgi kayıtlarınızda yok, muhasebecinize iletebilirim."
+_EKLE = " Firma panelindeki “📅 Planlı ödeme ve tahsilatlarım” bölümünden ekleyebilirsiniz."
+# Sonuç boşsa "bilgi yok" yerine söylenecek ANLAMLI cevap (boş sonuç da bilgidir):
+BOS_SONUC = {
+    "gecikmis": "Kayıtlarınıza göre gecikmiş ödemeniz yok.",
+    "planli_odemeler": "Bu dönem için eklediğiniz planlı ödeme yok." + _EKLE,
+    "beklenen_tahsilatlar": "Bu dönem için eklediğiniz beklenen tahsilat yok." + _EKLE,
+    "nakit_plani": "Bu dönem için eklediğiniz planlı ödeme ya da tahsilat yok." + _EKLE,
+}
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz",
          "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
 
@@ -45,6 +53,10 @@ def satir_metni(s):
     if "tip" in s:  # fatura
         return (f"- {s['tarih'] and tarih_tr(s['tarih'])} {s['tip']} faturası, {s['karsi_taraf']}: "
                 f"{tl(s['tutar_tl'])} (KDV oranı %{int(s['kdv_orani'] * 100)})")
+    if "yon" in s:  # kullanıcının eklediği planlı ödeme / tahsilat
+        ne = "ödenecek" if s["yon"] == "Gider" else "tahsil edilecek"
+        karsi = f" ({s['karsi_taraf']})" if s.get("karsi_taraf") else ""
+        return f"- {tarih_tr(s['tarih'])} · {s['aciklama']}{karsi}: {tl(s['tutar_tl'])} {ne}"
     metin = (f"- {s['tur']}, {donem_tr(s['donem'])} dönemi: {tl(s['tutar_tl'])}, "
              f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}, durum: {s['durum']}")
     if s.get("odeme_tarihi"):
@@ -58,7 +70,8 @@ def veri_hazirla(sorgu, satirlar):
     toplam = None
     # Faturalar burada YOK: alış (gider) ve satış (gelir) toplanırsa anlamsız bir rakam çıkar;
     # onların ayrı toplamları sablon_cevap'ta hesaplanır.
-    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis")
+    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis",
+                  "planli_odemeler", "beklenen_tahsilatlar")
             and len(satirlar) > 1):
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
         satirlar_metin.append(f"TOPLAM ({len(satirlar)} kayıt): {tl(toplam)}")
@@ -76,6 +89,8 @@ def _donem_basligi(sorgu, parametreler):
     p = parametreler or []
     if sorgu in ("ay_odemeleri", "odenenler", "faturalar") and p:
         return f"{donem_tr(p[0])} için "
+    if sorgu in ("planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
+        return f"{donem_tr(p[0])} için " if p else "Önümüzdeki dönemde "
     if sorgu == "yil_odenenler" and p:
         return f"{p[0]} yılında "
     if sorgu == "odeme_araligi" and len(p) >= 2:
@@ -109,7 +124,10 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
               "yil_odenenler": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_araligi": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_gecmisi": "Son ödemeleriniz:",
-              "faturalar": f"{n} fatura:"}.get(sorgu, "Kayıtlarınız:")
+              "faturalar": f"{n} fatura:",
+              "planli_odemeler": f"{n} planlı ödemeniz var (sizin eklediğiniz kayıtlar):",
+              "beklenen_tahsilatlar": f"{n} tahsilat bekleniyor (sizin eklediğiniz kayıtlar):",
+              "nakit_plani": f"{n} planlı giriş/çıkış var (sizin eklediğiniz kayıtlar):"}.get(sorgu, "Kayıtlarınız:")
     baslik = _donem_basligi(sorgu, parametreler) + baslik
     baslik = baslik[0].upper() + baslik[1:]
     if sorgu == "odeme_gecmisi":  # "en son ne zaman ödedim" -> asıl cevap ilk satırda, liste altta
@@ -131,6 +149,12 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
             secili = [s for s in satirlar if s["tip"] == tip]
             if secili:
                 metin += f"\n\n**{tip} toplamı: {tl(round(sum(s['tutar_tl'] for s in secili), 2))}** ({len(secili)} fatura)"
+    elif sorgu == "nakit_plani":  # giriş ve çıkış AYRI, sonra net (Python hesaplar)
+        giris = round(sum(s["tutar_tl"] for s in satirlar if s["yon"] == "Gelir"), 2)
+        cikis = round(sum(s["tutar_tl"] for s in satirlar if s["yon"] == "Gider"), 2)
+        net = round(giris - cikis, 2)
+        metin += (f"\n\n**Beklenen giriş: {tl(giris)}** · **Planlı çıkış: {tl(cikis)}** · "
+                  f"**Net: {'+' if net >= 0 else '−'}{tl(abs(net))}**")
     elif toplam is not None:
         metin += f"\n\n**Toplam: {tl(toplam)}**"
     return metin
@@ -181,14 +205,17 @@ def cevapla_kayit(soru, firma_id, niyet):
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     satirlar = calistir(sorgu, firma_id, *parametreler)
     if not satirlar:  # Kural 4: model çağrılmaz
-        return {"cevap": CEKIMSER, "kaynaklar": [], "satirlar": [], "yontem": "cekimser"}
+        bos = BOS_SONUC.get(sorgu)  # bazı sorgularda "kayıt yok" da bir cevaptır
+        return {"cevap": bos or CEKIMSER, "kaynaklar": [], "satirlar": [],
+                "yontem": "bos_sonuc" if bos else "cekimser"}
     if sorgu == "firma_bilgisi":  # yükümlülük değil, firma kartı: doğrudan şablon
         return {"cevap": firma_cevabi(satirlar[0]), "kaynaklar": [f"firmalar:{firma_id}"],
                 "satirlar": satirlar, "yontem": "sablon"}
 
     veri, toplam = veri_hazirla(sorgu, satirlar)
-    kaynaklar = [s["id"] for s in satirlar]
-    if len(satirlar) > 1:
+    # Kaynak etiketi her zaman metin: resmî kayıtlar 'Y018', kullanıcının eklediği kayıtlar 'plan#3'
+    kaynaklar = [f"plan#{s['id']}" if "yon" in s else str(s["id"]) for s in satirlar]
+    if len(satirlar) > 1 or sorgu in ("planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
         return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,

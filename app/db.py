@@ -76,6 +76,38 @@ SORGULAR = {
         "sql": """SELECT id, unvan, tur AS firma_turu, vergi_no, sektor, calisan_sayisi
                   FROM firmalar WHERE id = :firma_id""",
     },
+    # --- Kullanıcının KENDİ eklediği planlı kayıtlar (planli_islemler tablosu) ---
+    # Ay verilmezse bugünden sonraki kayıtlar gelir; verilirse o ayın kayıtları.
+    "planli_odemeler": {
+        "aciklama": "Kullanıcının kendi eklediği PLANLI ÖDEMELER (kira, tedarikçi vb. yapılacak ödemeler); "
+                    "ay söylenirse o ay, söylenmezse yaklaşanlar",
+        "parametreler": [],
+        "istege_bagli": ["ay"],
+        "sql": """SELECT id, yon, tarih, tutar_tl, aciklama, karsi_taraf FROM planli_islemler
+                  WHERE firma_id = :firma_id AND yon = 'Gider'
+                        AND ((:ay IS NULL AND tarih >= :bugun) OR substr(tarih, 1, 7) = :ay)
+                  ORDER BY tarih""",
+    },
+    "beklenen_tahsilatlar": {
+        "aciklama": "Kullanıcının kendi eklediği BEKLENEN TAHSİLATLAR (müşteriden gelecek ödemeler, alacaklar); "
+                    "ay söylenirse o ay, söylenmezse yaklaşanlar",
+        "parametreler": [],
+        "istege_bagli": ["ay"],
+        "sql": """SELECT id, yon, tarih, tutar_tl, aciklama, karsi_taraf FROM planli_islemler
+                  WHERE firma_id = :firma_id AND yon = 'Gelir'
+                        AND ((:ay IS NULL AND tarih >= :bugun) OR substr(tarih, 1, 7) = :ay)
+                  ORDER BY tarih""",
+    },
+    "nakit_plani": {
+        "aciklama": "Kullanıcının planlı ödemeleri VE beklenen tahsilatları birlikte, giriş-çıkış ve net "
+                    "(nakit planı, para giriş çıkışı); ay söylenirse o ay, söylenmezse yaklaşanlar",
+        "parametreler": [],
+        "istege_bagli": ["ay"],
+        "sql": """SELECT id, yon, tarih, tutar_tl, aciklama, karsi_taraf FROM planli_islemler
+                  WHERE firma_id = :firma_id
+                        AND ((:ay IS NULL AND tarih >= :bugun) OR substr(tarih, 1, 7) = :ay)
+                  ORDER BY tarih""",
+    },
     "gecikmis": {
         "aciklama": "Son tarihi geçmiş ve ödenmemiş (gecikmiş) ödemeler",
         "parametreler": [],
@@ -133,6 +165,23 @@ def tur_normalize(metin):
 
 _SEMA_GUNCEL = False
 
+# Kullanıcının kendi girdiği planlı ödeme/tahsilatlar. Muhasebecinin resmî kayıtlarından
+# (yukumlulukler) AYRI tutulur: "bu ay ne kadar vergi ödeyeceğim" hâlâ yalnız resmî kayıtlardan gelir.
+PLANLI_ISLEMLER_SEMA = """
+CREATE TABLE IF NOT EXISTS planli_islemler (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firma_id TEXT NOT NULL,
+    yon TEXT NOT NULL CHECK (yon IN ('Gider', 'Gelir')),   -- Gider: ödeyeceğim, Gelir: tahsil edeceğim
+    tarih TEXT NOT NULL,                                     -- YYYY-AA-GG
+    tutar_tl REAL NOT NULL CHECK (tutar_tl > 0),
+    aciklama TEXT NOT NULL,
+    karsi_taraf TEXT,
+    ekleyen_id INTEGER,
+    olusturma TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_planli_firma ON planli_islemler(firma_id, tarih);
+"""
+
 
 def _sema_guncelle(con):
     """Eski veritabanlarına yeni talep kolonlarını ekle (01'i yeniden çalıştırmadan, veri kaybetmeden)."""
@@ -141,6 +190,8 @@ def _sema_guncelle(con):
     for kolon in ("emir", "detay", "ozet"):
         if mevcut and kolon not in mevcut:
             con.execute(f"ALTER TABLE talepler ADD COLUMN {kolon} TEXT NULL")
+    if mevcut:  # yalnızca kurulmuş bir veritabanında (01 çalıştıysa) yeni tabloyu ekle
+        con.executescript(PLANLI_ISLEMLER_SEMA)
     con.commit()
     _SEMA_GUNCEL = True
 
@@ -231,6 +282,64 @@ def kayitli_eposta(firma_id):
         r = con.execute("SELECT eposta FROM kullanicilar WHERE firma_id = ? AND rol = 'firma' LIMIT 1",
                         (firma_id,)).fetchone()
         return r["eposta"] if r else None
+    finally:
+        con.close()
+
+
+# ---------- Kullanıcının kendi eklediği planlı ödeme / tahsilatlar ----------
+YONLER = {"Gider": "Ödeme yapacağım", "Gelir": "Ödeme alacağım (tahsilat)"}
+
+
+def planli_islem_ekle(firma_id, ekleyen_id, yon, tarih, tutar_tl, aciklama, karsi_taraf=""):
+    """Kullanıcı formundan gelen kaydı DOĞRULAYIP ekler (arayüze güvenmez). Yeni id döner.
+    firma_id oturumdan gelir (Kural 2); kullanıcı başka firmaya kayıt ekleyemez."""
+    _firma_kontrol(firma_id)
+    if yon not in YONLER:
+        raise ValueError(f"Geçersiz yön: {yon!r} (Gider ya da Gelir olmalı)")
+    tarih = str(tarih)
+    try:
+        datetime.strptime(tarih, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"Geçersiz tarih: {tarih!r} (YYYY-AA-GG olmalı)") from None
+    tutar = round(float(tutar_tl), 2)
+    if not 0 < tutar < 1_000_000_000:
+        raise ValueError("Tutar 0'dan büyük olmalı")
+    aciklama = (aciklama or "").strip()
+    if not 2 <= len(aciklama) <= 200:
+        raise ValueError("Açıklama 2-200 karakter olmalı")
+    con = baglan()
+    try:
+        cur = con.execute(
+            "INSERT INTO planli_islemler (firma_id, yon, tarih, tutar_tl, aciklama, karsi_taraf, ekleyen_id, "
+            "olusturma) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (firma_id, yon, tarih, tutar, aciklama, (karsi_taraf or "").strip()[:100] or None, ekleyen_id,
+             datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+        return cur.lastrowid
+    finally:
+        con.close()
+
+
+def planli_islemler(firma_id):
+    """Firmanın tüm planlı kayıtları (arayüz tablosu için), tarihe göre."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        return [dict(r) for r in con.execute(
+            "SELECT id, yon, tarih, tutar_tl, aciklama, karsi_taraf FROM planli_islemler "
+            "WHERE firma_id = ? ORDER BY tarih", (firma_id,))]
+    finally:
+        con.close()
+
+
+def planli_islem_sil(islem_id, firma_id):
+    """Yalnızca firmanın KENDİ kaydını siler (başka firmanın kaydı silinemez). True/False."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        cur = con.execute("DELETE FROM planli_islemler WHERE id = ? AND firma_id = ?", (islem_id, firma_id))
+        con.commit()
+        return cur.rowcount == 1
     finally:
         con.close()
 

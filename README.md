@@ -18,10 +18,13 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
 | "Son beyannamemi e-postama gönder." | Talep **"Onay bekliyor"** olarak kaydedilir, e-posta gönderilmez | Talepler tablosu |
 | "Hangi hisseyi alayım?" | Nazikçe reddedilir | — |
 | "Demo Yazılım'ın KDV'si ne kadar?" | Başka firmanın verisi **asla** verilmez | — |
+| "Aralıkta planladığım ödemeler neler?" / "Ne kadar tahsilat bekliyorum?" / "Aralık nakit planım" | Kullanıcının **kendi eklediği** planlı ödeme ve tahsilatlar; nakit planında giriş, çıkış ve net | SQLite (`planli_islemler`) |
 
 **Arayüz (Streamlit):**
-- **Firma paneli:** özet kartlar (bu ay ödenecek, geciken, en yakın son tarih), yükümlülük tablosu, talepler ve sohbet. Her cevabın altında hangi yoldan (sql/rag) ve hangi kaynaktan geldiği yazar.
-- **Muhasebeci paneli:** onay bekleyen talepler, **Onayla / Reddet** butonları.
+- **Firma paneli:** özet kartlar (bu ay ödenecek, geciken, en yakın son tarih), yükümlülük tablosu, **📅 planlı ödeme / tahsilat ekleme formu**, talepler ve sohbet. Her cevabın altında hangi yoldan (sql/rag) ve hangi kaynaktan geldiği yazar.
+- **Muhasebeci paneli:** onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır, denetim kaydı tutulur.
+
+Kullanıcının eklediği kayıtlar muhasebecinin resmî kayıtlarından (`yukumlulukler`) **ayrı** tutulur; "bu ay ne kadar vergi ödeyeceğim" sorusu yalnız resmî kayıtlardan cevaplanır.
 
 ---
 
