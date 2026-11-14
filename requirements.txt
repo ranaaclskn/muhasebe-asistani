@@ -10,3 +10,8 @@ python-dotenv>=1.0
 requests>=2.31
 pytest>=8.0
 tiktoken>=0.7          # token tabanlı chunking (atölye d5_02 ile aynı)
+# Atölye (agent/onay/API dersi) — hocanın listesi
+langgraph-checkpoint-sqlite>=2,<4   # LangGraph durumunu SQLite'a kaydetme (hafıza, insan onayı)
+mcp>=1.10,<2                        # araçları Model Context Protocol ile dışarı açma
+fastapi>=0.110,<1                   # HTTP API (n8n ile iki yönlü iletişim)
+uvicorn>=0.30,<1                    # FastAPI sunucusu
