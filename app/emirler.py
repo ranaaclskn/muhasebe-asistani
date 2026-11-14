@@ -6,6 +6,9 @@ alanlarını model değil KOD çıkarır. E-posta adresi ASLA metinden alınmaz 
 
 Kontrol (proje klasöründen):  python -m app.emirler
 """
+from datetime import date
+
+from app.config import BUGUN
 import re
 
 AYLAR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz",
@@ -17,6 +20,9 @@ EMIRLER = {
                      "alanlar": ["belge_turu", "donem"]},
     "gorusme_talebi": {"aciklama": "Muhasebeciyle görüşme talebi oluştur",
                        "alanlar": []},
+    "planli_ekle": {"aciklama": "Kullanıcının kendi planlı ödeme/tahsilat kaydını ekle (kullanıcı onaylar)",
+                    "alanlar": ["yon", "tarih", "tutar_tl"]},
+                       
 }
 
 # Sorudaki kelime -> belgeler tablosundaki dosya türü (F001_KDV_..., F001_MUHSGK_...)
@@ -26,6 +32,9 @@ BELGE_TURLERI = [("kdv", "KDV"), ("muhtasar", "MUHSGK"), ("muhsgk", "MUHSGK"),
 EKSIK_SORULARI = {
     "belge_turu": "Hangi beyanname: KDV mi, Muhtasar ve prim hizmet (MUHSGK) mi?",
     "donem": "Hangi dönem? (ör. 'Eylül' ya da 'son')",
+    "yon": "Bu bir ödeme mi (ödeyeceğim) yoksa tahsilat mı (alacağım)?",
+    "tarih": "Hangi tarihte? (ör. 5 Aralık)",
+    "tutar_tl": "Tutar ne kadar? (ör. 20.000 TL)",
 }
 
 
@@ -38,10 +47,12 @@ def emir_kalibi(soru):
     'ne zaman gönderilir' gibi bilgi soruları emir sayılmaz."""
     s = _kucuk(soru)
     return bool(re.search(r"\b(gönder|gönderin|gönderir misin|ilet|iletin|yolla|yollayın|"
-                          r"oluştur|oluşturun|ayarla|ayarlayın)\b", s))
+                          r"oluştur|oluşturun|ayarla|ayarlayın|kaydet|kaydedin|ekle|ekleyin|not al|not et)\b", s))
 
 
 def emir_bul(s):
+    if re.search(r"kaydet|kaydedin|ekle\b|ekleyin|not al|not et", s):
+        return "planli_ekle"
     if re.search(r"görüş|randevu|toplantı|konuşmak|aransın|arasın", s):
         return "gorusme_talebi"
     if re.search(r"gönder|ilet|yolla|mail|e-?posta", s):
@@ -62,6 +73,38 @@ def alanlari_cikar(s):
         alanlar["donem"] = "son"  # akış, firmanın en son beyannamesini veritabanından bulur
     return alanlar
 
+def tutar_cikar(s):
+    """'20.000 TL' / '20000 tl' / '1.250,50 TL' / '20 bin lira' -> 20000.0 ; yoksa None"""
+    m = re.search(r"(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?\s*(bin)?\s*(tl|lira|₺)", s)
+    if not m:
+        return None
+    deger = int(m.group(1).replace(".", "")) + int((m.group(2) or "0").ljust(2, "0")) / 100
+    return round(deger * (1000 if m.group(3) else 1), 2)
+
+
+def tarih_cikar(s):
+    """'05.12.2026' / '5 aralık' / '5 aralık 2026' -> '2026-12-05' ; geçersiz ya da yoksa None"""
+    m = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b", s)
+    if m:
+        g, a, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.search(rf"\b(\d{{1,2}})\s+({'|'.join(AYLAR)})", s)
+        if not m:
+            return None
+        yil = re.search(r"\b(20\d{2})\b", s)
+        g, a, y = int(m.group(1)), AYLAR.index(m.group(2)) + 1, int(yil.group(1) if yil else BUGUN[:4])
+    try:
+        return date(y, a, g).isoformat()  # 31 Şubat gibi geçersiz tarih -> None
+    except ValueError:
+        return None
+
+
+def yon_cikar(s):
+    if re.search(r"alaca|tahsil|gelecek|ödeme gel|para gel", s):
+        return "Gelir"
+    if re.search(r"ödeyece|ödeme yapaca|ödenecek|ödemem var|vereceğim", s):
+        return "Gider"
+    return None
 
 def emir_cikar(soru):
     """'Eylül KDV beyannamemi e-postama gönder' ->

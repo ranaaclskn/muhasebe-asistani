@@ -8,7 +8,7 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from app.db import belge_bul, kayitli_eposta, talep_ekle
-from app.kayit import cevapla_kayit, donem_tr
+from app.kayit import cevapla_kayit, donem_tr, tarih_tr, tl
 from app.log import log_yaz
 from app.niyet import baska_firma_adi, niyet_belirle
 from app.rag import cevapla_belge
@@ -24,6 +24,7 @@ class Durum(TypedDict, total=False):
     cevap: str
     kaynaklar: list
     arac: str              # sql | rag | talep | ret
+    bekleyen_kayit: dict   # kullanıcının onayını bekleyen planlı kayıt
 
 
     # 2) DÜĞÜMLER: her biri Durum'u alır, değişen alanları sözlük olarak döndürür
@@ -56,6 +57,11 @@ def talep_dugumu(d: Durum):
                 "kaynaklar": [], "arac": "talep_eksik"}
 
     emir, alanlar = n["emir"], dict(n["alanlar"])
+    if emir == "planli_ekle":  # VERİTABANINA YAZMA YOK: önce kullanıcı özeti görüp onaylar
+        ne = "ödeme yapılacak" if alanlar["yon"] == "Gider" else "tahsilat bekleniyor"
+        ozet = f"{tarih_tr(alanlar['tarih'])} · {tl(alanlar['tutar_tl'])} {ne} · “{alanlar['aciklama']}”"
+        return {"cevap": f"📝 Şu kaydı ekleyeyim mi?\n\n**{ozet}**\n\nDoğruysa aşağıdan **✅ Kaydet**'e basın.",
+                "kaynaklar": [], "arac": "kayit_onayi", "bekleyen_kayit": alanlar}
     if emir == "belge_gonder":
         belge = belge_bul(firma_id, alanlar["belge_turu"], alanlar["donem"])
         if not belge:
@@ -75,6 +81,7 @@ def talep_dugumu(d: Durum):
     return {"cevap": f"📨 Talebiniz muhasebecinize iletildi (talep no: {talep_id}).\n\n{ozet}\n\n"
                      "Muhasebeciniz onayladıktan sonra işlem yapılacak.",
             "kaynaklar": [f"talep:{talep_id}"], "arac": "talep"}
+
 
 
 def reddet_dugumu(d: Durum):
