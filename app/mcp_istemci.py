@@ -22,7 +22,7 @@ from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamablehttp_client
 
 KOK = Path(__file__).resolve().parent.parent
-MCP_URL = "http://127.0.0.1:8765/mcp"
+MCP_URL = "http://127.0.0.1:8001/mcp"  # sunucu 0.0.0.0:8001'i dinler (atölye FastMCP ayarı)
 
 
 def _stdio_parametreleri(firma_id):

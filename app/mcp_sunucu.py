@@ -9,7 +9,7 @@ Atölye karşılığı: d7_04_mcp_server.py (FastMCP("KampusDestek")).
   2) HTTP (streamable-http): Sunucu AYRI bir terminalde bir port dinler, istemci ona bağlanır:
        Terminal 1:  MUHASEBE_FIRMA_ID=F001 python -m app.mcp_sunucu --http
        Terminal 2:  python -m app.mcp_istemci --http
-     Adres: http://127.0.0.1:8765/mcp (yalnızca bu bilgisayar; 8000 FastAPI için boş bırakıldı)
+     Adres: http://127.0.0.1:8001/mcp (sunucu 0.0.0.0:8001'i dinler; 8000 FastAPI'ye ayrıldı)
 
 GÜVENLİK (Kural 2): Araçların hiçbirinde firma_id PARAMETRESİ YOKTUR. Firma, sunucu başlatılırken
 istemcinin verdiği MUHASEBE_FIRMA_ID ortam değişkeninden (oturumdan) okunur. Böylece aracı çağıran
@@ -27,13 +27,20 @@ from mcp.server.fastmcp import FastMCP
 
 from app.db import SORGULAR, baglan, calistir
 
-MCP_HOST, MCP_PORT = "127.0.0.1", 8765  # yalnızca yerel erişim; internete açılmaz
+# Atölye ayarı (hocanın FastMCP örneği): host="0.0.0.0", port=8001.
+# 0.0.0.0 = bilgisayarın TÜM ağ arayüzlerinden dinle. Böylece Docker'daki n8n de sunucuya
+# http://host.docker.internal:8001/mcp ile ulaşabilir (127.0.0.1 olsaydı yalnız bu bilgisayar).
+# DİKKAT: Kimlik doğrulama yok; yalnız ev/okul ağında demo için. Halka açık ağda çalıştırmayın.
+MCP_HOST, MCP_PORT = "0.0.0.0", 8001
 
-mcp = FastMCP("MuhasebeAsistani", log_level="WARNING",  # INFO satırları çıktıyı kalabalıklaştırmasın
-              host=MCP_HOST, port=MCP_PORT,
-              # HTTP modunda: her istek bağımsız + düz JSON cevap. Açık kalan bildirim (SSE) kanalı
-              # olmadığı için istemci bağlantıyı kapatınca sunucu "ClosedResourceError" yazmaz.
-              stateless_http=True, json_response=True)
+mcp = FastMCP(
+    "Muhasebe MCP Server",
+    host=MCP_HOST,
+    port=MCP_PORT,
+    stateless_http=True,   # her HTTP isteği bağımsız (oturum tutulmaz)
+    json_response=True,    # cevap düz JSON (SSE akışı değil); istemci kapanınca hata yazmaz
+    log_level="WARNING",   # INFO satırları çıktıyı kalabalıklaştırmasın
+)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
@@ -111,7 +118,8 @@ def talep_durumu(talep_id: int) -> str:
 if __name__ == "__main__":
     if "--http" in sys.argv:
         firma = _firma()  # firma oturumu yoksa sunucu hiç başlamaz
-        print(f"MCP sunucusu çalışıyor: http://{MCP_HOST}:{MCP_PORT}/mcp | firma oturumu: {firma}\n"
+        print(f"MCP sunucusu çalışıyor: http://127.0.0.1:{MCP_PORT}/mcp (dinlenen: {MCP_HOST}:{MCP_PORT}) "
+              f"| firma oturumu: {firma}\n"
               "Araçlar: sorgu_listesi, kayit_sorgula, belge_ara, talep_durumu, talep_gonder (onaylı) "
               "| Durdurmak için Ctrl + C",
               file=sys.stderr, flush=True)
