@@ -34,7 +34,7 @@ from app.db import SORGULAR, baglan, calistir
 MCP_HOST, MCP_PORT = "0.0.0.0", 8001
 
 mcp = FastMCP(
-    "Muhasebe MCP Server",
+    "Kampus MCP Server",
     host=MCP_HOST,
     port=MCP_PORT,
     stateless_http=True,   # her HTTP isteği bağımsız (oturum tutulmaz)
