@@ -379,8 +379,13 @@ def _niyet_modelden(soru, temperature=0.0, deneme=2, duzelt=True):
             return kural_duzelt(soru, sonuc) if duzelt else sonuc
         except (json.JSONDecodeError, ValueError) as e:
             hata = e
+        except Exception as e:  # Ollama kapalı / zaman aşımı: KURALLARA DÖN (atölye: kural_fallback)
+            hata = f"model_ulasilamadi: {type(e).__name__}"
+            break
     varsayilan = {"niyet": "belge", "sorgu": None, "parametreler": [], "hata": str(hata)}
-    return kural_duzelt(soru, varsayilan) if duzelt else varsayilan
+    sonuc = kural_duzelt(soru, varsayilan) if duzelt else varsayilan
+    sonuc.setdefault("hata", str(hata))  # "model ulaşılamadı" bilgisi kaybolmasın
+    return sonuc
 
 def niyet_belirle(soru, temperature=0.0, deneme=2, duzelt=True):
     """Niyet (bilgi mi emir mi?) + emir isteminde emir ve alanları.

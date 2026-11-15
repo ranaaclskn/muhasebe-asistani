@@ -129,6 +129,55 @@ def emir_cikar(soru):
             "eksik_sorusu": " ".join(EKSIK_SORULARI[a] for a in eksik) or None}
 
 
+# ---------- Çok adımlı sohbet (atölye 7. gün destek_grafi: soru -> cevap -> sonraki soru) ----------
+def alan_cozumle(alan, cevap):
+    """Kullanıcının kısa cevabını alan değerine çevir: 'KDV' -> 'KDV', 'Eylül' -> '2026-09',
+    '20 bin' -> 20000.0, '5 Aralık' -> '2026-12-05', 'ödeme' -> 'Gider'. Anlaşılmazsa None."""
+    s = _kucuk(cevap)
+    if alan == "belge_turu":
+        return next((v for k, v in BELGE_TURLERI if k in s), None)
+    if alan == "donem":
+        return alanlari_cikar(s).get("donem")
+    if alan == "tarih":
+        return tarih_cikar(s)
+    if alan == "tutar_tl":  # cevapta 'TL' yazmasa da sayı yeterli ("20000", "20 bin", "1.250,50")
+        tutar = tutar_cikar(s) or tutar_cikar(s + " tl")
+        return tutar if tutar and tutar > 0 else None
+    if alan == "yon":
+        if re.search(r"tahsil|gelir|alaca|gelecek|alınacak", s):
+            return "Gelir"
+        if re.search(r"ödeme|gider|ödeyece|ödenecek|vereceğim", s):
+            return "Gider"
+        return None
+    return None
+
+
+def iptal_mi(cevap):
+    return bool(re.fullmatch(r"\s*(vazgeç|vazgeçtim|iptal|iptal et|boşver|hayır vazgeç)\s*[.!]?\s*", _kucuk(cevap)))
+
+
+def evet_mi(cevap):
+    return bool(re.fullmatch(r"\s*(evet|e|onay|onaylıyorum|tamam|olur|kaydet|gönder)\s*[.!]?\s*", _kucuk(cevap)))
+
+
+def talep_sorgu_kalibi(soru):
+    """'3 numaralı talebim ne durumda', 'taleplerim ne oldu' -> talep DURUM sorgusu (atölye SORGULA kolu).
+    'talep oluştur' gibi emirler hariç."""
+    s = _kucuk(soru)
+    if emir_kalibi(soru):
+        return False
+    return bool(re.search(r"tale[pb]", s) and re.search(
+        r"durum|ne oldu|ne durumda|onaylandı mı|onaylanmış mı|akıbet|nerede|neler|listele|göster|\d", s))
+
+
+def talep_no_bul(soru):
+    """'3 numaralı talep', 'talep 3', '#3', 'talep no 3' -> 3 ; yoksa None"""
+    s = _kucuk(soru)
+    m = (re.search(r"#\s*(\d+)", s) or re.search(r"\b(\d+)\s*(?:numaralı|nolu|no'lu|no\b|sayılı)", s)
+         or re.search(r"tale[pb]\w*\s*(?:no\s*)?:?\s*(\d+)", s))
+    return int(m.group(1)) if m else None
+
+
 def _kontrol():
     testler = [
         ("Eylül KDV beyannamemi e-postama gönder.", "belge_gonder", {"belge_turu": "KDV", "donem": "2026-09"}, []),

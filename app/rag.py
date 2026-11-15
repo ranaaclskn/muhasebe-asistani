@@ -122,7 +122,7 @@ def cevapla_belge(soru, firma_id):
     try:
         j = json.loads(llm().invoke(mesajlar).content)
         metin = str(j.get("cevap") or "").strip()
-    except (json.JSONDecodeError, AttributeError):
+    except Exception:  # bozuk JSON ya da model ulaşılamıyor -> uydurma yerine "emin değilim"
         sonuc["cevap"] = EMIN_DEGIL
         return sonuc
     if not metin or CEKIMSER.split(",")[0] in metin:  # model çekimser kaldı

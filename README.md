@@ -16,6 +16,8 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
 | "Eylül KDV beyannamemde ödenecek tutar ne?" | Belge sorusu: arama → rerank → kaynaklı cevap | ChromaDB (RAG) |
 | "SGK primini geç ödersem ne olur?" | Ortak rehberlerden genel bilgi verilir | ChromaDB (RAG) |
 | "Son beyannamemi e-postama gönder." | Talep **"Onay bekliyor"** olarak kaydedilir, e-posta gönderilmez | Talepler tablosu |
+| "Beyannamemi gönder" → *"Hangi beyanname?"* → "KDV" → *"Hangi dönem?"* → "Eylül" → *"Onaylıyor musunuz?"* → "evet" | **Çok adımlı sohbet:** eksik bilgi tek tek sorulur, özet gösterilir, onaydan sonra kayıt açılır (LangGraph `interrupt` + SQLite checkpoint; atölye 7. gün) | Talepler / planlı kayıtlar |
+| "3 numaralı talebim ne durumda?" / "Taleplerim ne oldu?" | Talep durumu sorgulama (yalnız kendi firmasının talepleri) | Talepler tablosu |
 | "Hangi hisseyi alayım?" | Nazikçe reddedilir | — |
 | "Demo Yazılım'ın KDV'si ne kadar?" | Başka firmanın verisi **asla** verilmez | — |
 | "Aralıkta planladığım ödemeler neler?" / "Ne kadar tahsilat bekliyorum?" / "Aralık nakit planım" | Kullanıcının **kendi eklediği** planlı ödeme ve tahsilatlar; nakit planında giriş, çıkış ve net | SQLite (`planli_islemler`) |

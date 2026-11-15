@@ -237,7 +237,10 @@ def cevapla_kayit(soru, firma_id, niyet):
         return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,
                 "satirlar": satirlar, "yontem": "liste"}
     mesajlar = [("system", SISTEM), ("human", f"VERİ:\n{veri}\n\nSORU: {soru}")]
-    cevap = llm().invoke(mesajlar).content.strip()
+    try:
+        cevap = llm().invoke(mesajlar).content.strip()
+    except Exception:  # model ulaşılamazsa şablon cevap (rakamlar zaten SQL'den)
+        cevap = ""
 
     kontrol = cevap_dogrula(cevap, veri, satirlar, toplam)
     if kontrol["gecerli"]:

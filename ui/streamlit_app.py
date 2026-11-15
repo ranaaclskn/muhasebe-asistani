@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st  # noqa: E402
 
-from app.akis import sor  # noqa: E402
+from app.akis import devam, sor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
 from datetime import date  # noqa: E402
 
@@ -124,36 +124,40 @@ def firma_paneli(k):
             if m.get("kaynak"):
                 st.caption(m["kaynak"])
 
-    soru = st.chat_input("Ör. Ekim SGK primi ödendi mi?")
+    # Asistan bir soru sorduysa (LangGraph interrupt) sonraki mesaj o soruya CEVAP olarak gider
+    bekleyen = st.session_state.get("bekleyen")
+    ipucu = "Cevabınızı yazın (iptal için: vazgeç)" if bekleyen else "Ör. Ekim SGK primi ödendi mi?"
+    soru = st.chat_input(ipucu)
+
+    if bekleyen and bekleyen.get("tur") == "onay":  # onay sorusunda butonlar da var
+        c1, c2, _ = st.columns([1, 1, 4])
+        if c1.button("✅ Evet"):
+            soru = "evet"
+        if c2.button("❌ Hayır"):
+            soru = "hayır"
+    elif bekleyen and st.button("↩️ Vazgeç"):
+        soru = "vazgeç"
+
     if soru:
         st.session_state.mesajlar.append({"rol": "user", "metin": soru})
         with st.chat_message("user"):
             st.write(soru)
         with st.chat_message("assistant"):
             with st.spinner("Kayıtlarınıza bakıyorum..."):
-                s = sor(soru, firma_id, k["id"])
-            kaynak = f"Yol: {s['arac']} · Kaynak: {', '.join(s['kaynaklar']) or '—'}"
+                if bekleyen:  # KALDIĞI YERDEN devam (Command(resume=...))
+                    s = devam(soru, st.session_state.thread_id)
+                else:         # yeni soru, yeni thread
+                    s = sor(soru, firma_id, k["id"])
+            if s["bekleyen"]:
+                kaynak = "Yol: soru · Cevabınız bekleniyor"
+            else:
+                kaynak = f"Yol: {s['arac']} · Kaynak: {', '.join(s['kaynaklar']) or '—'}"
             st.write(s["cevap"])
             st.caption(kaynak)
         st.session_state.mesajlar.append({"rol": "assistant", "metin": s["cevap"], "kaynak": kaynak})
-        st.session_state.bekleyen_kayit = s.get("bekleyen_kayit")  # varsa onay butonları çıkar
-
-    b = st.session_state.get("bekleyen_kayit")
-    if b:  # KULLANICI ONAYI: kayıt ancak burada, butona basınca yazılır
-        c1, c2, _ = st.columns([1, 1, 4])
-        if c1.button("✅ Kaydet"):
-            try:
-                no = planli_islem_ekle(firma_id, k["id"], b["yon"], b["tarih"], b["tutar_tl"], b["aciklama"])
-                metin = f"✅ Kaydedildi (#{no}). “📅 Planlı ödeme ve tahsilatlarım” bölümünde görebilirsiniz."
-            except ValueError as e:
-                metin = f"Kaydedilemedi: {e}"
-            st.session_state.mesajlar.append({"rol": "assistant", "metin": metin})
-            st.session_state.bekleyen_kayit = None
-            st.rerun()
-        if c2.button("❌ Vazgeç"):
-            st.session_state.mesajlar.append({"rol": "assistant", "metin": "Tamam, kaydetmedim."})
-            st.session_state.bekleyen_kayit = None
-            st.rerun()
+        st.session_state.bekleyen = s["bekleyen"]
+        st.session_state.thread_id = s["thread_id"] if s["bekleyen"] else None
+        st.rerun()  # butonlar / ipucu güncel duruma göre yeniden çizilsin
 
 
 # ---------- 3) MUHASEBECİ PANELİ ----------

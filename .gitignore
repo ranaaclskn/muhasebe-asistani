@@ -4,3 +4,4 @@ data/muhasebe.db
 data/chroma/
 data/sonuclar.csv
 __pycache__/
+data/langgraph_checkpoint.sqlite*
