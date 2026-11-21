@@ -5,3 +5,12 @@ headless = true
 
 [browser]
 gatherUsageStats = false
+
+# Görünüm: açık tema, mor ana renk, yuvarlak köşeler (ui/streamlit_app.py içindeki CSS ile uyumlu)
+[theme]
+base = "light"
+primaryColor = "#6d28d9"
+backgroundColor = "#f7f8fc"
+secondaryBackgroundColor = "#f1f2f9"
+textColor = "#0f172a"
+baseRadius = "12px"

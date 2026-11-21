@@ -500,6 +500,39 @@ def yukumlulukler(firma_id):
         con.close()
 
 
+def aylik_gelir_gider(firma_id):
+    """Grafik için firmanın ay ay para giriş/çıkışları (kalem bazında). Satırlar:
+    {"ay": "2026-10", "yon": "Gelir"|"Gider", "kalem": "Satış faturaları", "tutar": 12345.6}
+
+    Gelir: satış faturaları + kullanıcının planladığı tahsilatlar.
+    Gider: alış faturaları + net maaş ödemeleri + vergi/prim yükümlülükleri + planlı ödemeler.
+    (Maaşta NET kullanılır: SGK/muhtasar kesintisi zaten yükümlülük olarak sayılıyor, çift sayılmasın.)
+    Yükümlülüğün ayı: ödendiyse ödeme tarihi, değilse son ödeme tarihi."""
+    _firma_kontrol(firma_id)
+    sql = """
+        SELECT substr(tarih, 1, 7) AS ay,
+               CASE tip WHEN 'Satış' THEN 'Gelir' ELSE 'Gider' END AS yon,
+               CASE tip WHEN 'Satış' THEN 'Satış faturaları' ELSE 'Alış faturaları' END AS kalem,
+               SUM(tutar_tl) AS tutar
+        FROM faturalar WHERE firma_id = :f GROUP BY 1, 2, 3
+        UNION ALL
+        SELECT substr(odeme_tarihi, 1, 7), 'Gider', 'Maaşlar (net)', SUM(net_tl)
+        FROM bordrolar WHERE firma_id = :f GROUP BY 1
+        UNION ALL
+        SELECT substr(COALESCE(odeme_tarihi, son_odeme_tarihi), 1, 7), 'Gider', 'Vergi ve prim', SUM(tutar_tl)
+        FROM yukumlulukler WHERE firma_id = :f GROUP BY 1
+        UNION ALL
+        SELECT substr(tarih, 1, 7), yon, CASE yon WHEN 'Gelir' THEN 'Planlı tahsilat' ELSE 'Planlı ödeme' END,
+               SUM(tutar_tl)
+        FROM planli_islemler WHERE firma_id = :f GROUP BY 1, 2
+        ORDER BY 1"""
+    con = baglan()
+    try:
+        return [dict(r) for r in con.execute(sql, {"f": firma_id})]
+    finally:
+        con.close()
+
+
 def firma_talepleri(firma_id):
     """Firmanın kendi talepleri ve durumları."""
     _firma_kontrol(firma_id)
