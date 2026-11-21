@@ -134,6 +134,43 @@ SORGULAR = {
                   ORDER BY son_odeme_tarihi, id
                   LIMIT 1""",
     },
+    # --- Çalışanlar ve bordro (kurgusal). Modelin menüsünde YOK: soruyu app/bordro.py kodla tanır,
+    # çalışanı isimden kod bulur (calisan_id modelden gelmez), hesapları Python yapar. ---
+    "calisan_listesi": {
+        "aciklama": "Firmanın çalışanları: ad soyad, görev, işe giriş",
+        "parametreler": [],
+        "menude_yok": True,
+        "sql": """SELECT id, ad_soyad, gorev, ise_giris FROM calisanlar
+                  WHERE firma_id = :firma_id ORDER BY id""",
+    },
+    "calisan_bordrosu": {
+        "aciklama": "Bir çalışanın aylık brüt, kesinti ve net ücretleri",
+        "parametreler": ["calisan_id"],
+        "menude_yok": True,
+        "sql": """SELECT b.*, c.ad_soyad, c.gorev FROM bordrolar b JOIN calisanlar c ON c.id = b.calisan_id
+                  WHERE b.firma_id = :firma_id AND b.calisan_id = :calisan_id
+                  ORDER BY b.donem""",
+    },
+    "ay_bordrosu": {
+        "aciklama": "Bir ayda her çalışana ödenen brüt / net ücret (en yüksek netten başlayarak)",
+        "parametreler": ["ay"],
+        "menude_yok": True,
+        "sql": """SELECT b.*, c.ad_soyad, c.gorev FROM bordrolar b JOIN calisanlar c ON c.id = b.calisan_id
+                  WHERE b.firma_id = :firma_id AND b.donem = :ay
+                  ORDER BY b.net_tl DESC""",
+    },
+    "bordro_aylik_toplam": {
+        "aciklama": "Her ay çalışanlara ödenen toplam brüt, kesintiler ve net",
+        "parametreler": [],
+        "menude_yok": True,
+        "sql": """SELECT donem, COUNT(*) AS kisi, ROUND(SUM(brut_tl), 2) AS brut_tl,
+                         ROUND(SUM(sgk_isci_tl), 2) AS sgk_isci_tl, ROUND(SUM(issizlik_isci_tl), 2) AS issizlik_isci_tl,
+                         ROUND(SUM(gelir_vergisi_tl), 2) AS gelir_vergisi_tl,
+                         ROUND(SUM(damga_vergisi_tl), 2) AS damga_vergisi_tl, ROUND(SUM(net_tl), 2) AS net_tl,
+                         MAX(odeme_tarihi) AS odeme_tarihi
+                  FROM bordrolar WHERE firma_id = :firma_id
+                  GROUP BY donem ORDER BY donem""",
+    },
     "yaklasanlar": {
         "aciklama": "Bugünden sonraki ödenmemiş ödemeler, en yakından başlayarak (en yakın 3 / 5 ödeme)",
         "parametreler": [],
@@ -213,6 +250,54 @@ CREATE INDEX IF NOT EXISTS ix_planli_firma ON planli_islemler(firma_id, tarih);
 """
 
 
+# Kurgusal çalışanlar ve aylık bordro (scripts/00_bordro_uret.py üretir). Resmî kayıt gibi salt okunur:
+# asistan bunları yalnızca SORGULAR'daki hazır sorgularla okur.
+BORDRO_SEMA = """
+CREATE TABLE IF NOT EXISTS calisanlar (
+    id TEXT PRIMARY KEY,
+    firma_id TEXT NOT NULL,
+    ad_soyad TEXT NOT NULL,
+    gorev TEXT,
+    ise_giris TEXT
+);
+CREATE TABLE IF NOT EXISTS bordrolar (
+    id TEXT PRIMARY KEY,
+    firma_id TEXT NOT NULL,
+    calisan_id TEXT NOT NULL REFERENCES calisanlar(id),
+    donem TEXT NOT NULL,                 -- YYYY-AA
+    brut_tl REAL NOT NULL,
+    sgk_isci_tl REAL NOT NULL,           -- SGK işçi payı (%14)
+    issizlik_isci_tl REAL NOT NULL,      -- işsizlik sigortası işçi payı (%1)
+    gelir_vergisi_tl REAL NOT NULL,      -- toplamı o ayın muhtasar tutarına eşit
+    damga_vergisi_tl REAL NOT NULL,
+    net_tl REAL NOT NULL,                -- çalışanın eline geçen
+    odeme_tarihi TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_bordro_firma ON bordrolar(firma_id, donem);
+CREATE INDEX IF NOT EXISTS ix_calisan_firma ON calisanlar(firma_id);
+"""
+_BORDRO_KOLONLARI = {
+    "calisanlar": ["id", "firma_id", "ad_soyad", "gorev", "ise_giris"],
+    "bordrolar": ["id", "firma_id", "calisan_id", "donem", "brut_tl", "sgk_isci_tl", "issizlik_isci_tl",
+                  "gelir_vergisi_tl", "damga_vergisi_tl", "net_tl", "odeme_tarihi"],
+}
+
+
+def bordro_tablolari_kur(con):
+    """Tabloları oluştur; boşlarsa data/csv/calisanlar.csv + bordrolar.csv'den doldur (CSV yoksa boş kalır)."""
+    import csv
+    from app.config import CSV_DIR
+    con.executescript(BORDRO_SEMA)
+    for tablo, kolonlar in _BORDRO_KOLONLARI.items():
+        yol = CSV_DIR / f"{tablo}.csv"
+        if not yol.exists() or con.execute(f"SELECT COUNT(*) FROM {tablo}").fetchone()[0]:
+            continue
+        with open(yol, encoding="utf-8", newline="") as f:
+            satirlar = [tuple(s[k] for k in kolonlar) for s in csv.DictReader(f)]
+        con.executemany(f"INSERT INTO {tablo} ({', '.join(kolonlar)}) VALUES "
+                        f"({', '.join('?' for _ in kolonlar)})", satirlar)
+
+
 def _sema_guncelle(con):
     """Eski veritabanlarına yeni talep kolonlarını ekle (01'i yeniden çalıştırmadan, veri kaybetmeden)."""
     global _SEMA_GUNCEL
@@ -220,8 +305,9 @@ def _sema_guncelle(con):
     for kolon in ("emir", "detay", "ozet"):
         if mevcut and kolon not in mevcut:
             con.execute(f"ALTER TABLE talepler ADD COLUMN {kolon} TEXT NULL")
-    if mevcut:  # yalnızca kurulmuş bir veritabanında (01 çalıştıysa) yeni tabloyu ekle
+    if mevcut:  # yalnızca kurulmuş bir veritabanında (01 çalıştıysa) yeni tabloları ekle
         con.executescript(PLANLI_ISLEMLER_SEMA)
+        bordro_tablolari_kur(con)
     con.commit()
     _SEMA_GUNCEL = True
 

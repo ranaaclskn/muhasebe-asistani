@@ -12,8 +12,9 @@ Kontrol (proje klasöründen):  python -m app.rag
 from langchain_chroma import Chroma
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-from app.config import CHROMA_DIR, EMBED_MODEL, KOLEKSIYON, LLM_MODEL, OLLAMA_URL
+from app.config import BELGE_DIR, CHROMA_DIR, EMBED_MODEL, KOLEKSIYON, LLM_MODEL, OLLAMA_URL
 import json
+import re
 
 from app.dogrulama import kanit_eslestir, lexical_score, rerank, soru_donemi, validate_citations
 
@@ -97,9 +98,95 @@ def llm():
     return _LLM
 
 
+# ---------- Takvim soruları: modelsiz, belgeden AYNEN alıntı ----------
+# "KDV ne zaman ödenir?" doğru belgeyi (vergi_takvimi.txt) buluyordu ama 1.5b model cümleyi bozuyordu
+# ("28 Ekim'de ödüllendirilir") ve firmanın beyanname tarihini genel kural gibi sunuyordu. Kural sorusunun
+# cevabı takvimde tek paragraf: o paragraf değiştirilmeden verilir (uydurma imkânı yok).
+TAKVIM = "vergi_takvimi.txt"
+_TAKVIM_TURLERI = [("geçici", "Geçici vergi"), ("kdv", "KDV beyannamesi"), ("muhtasar", "Muhtasar"),
+                   ("muhsgk", "Muhtasar"), ("sgk", "SGK primi"), ("prim", "SGK primi")]
+
+
+def takvim_kalibi(soru):
+    """Genel son tarih KURALI mı soruluyor? ('ne zaman ödenir', 'ayın kaçında verilir', 'son günü')
+    'ne zaman ödedim / ödendi mi' gibi kişisel kayıt soruları değil."""
+    s = soru.replace("İ", "i").replace("I", "ı").lower()
+    zaman = re.search(r"ne zaman|kaçında|kaçına kadar|hangi gün|son gün|en geç|son tarih", s)
+    kural = re.search(r"ödenir|verilir|ödenmeli|ödenmesi|verilmeli|verilmesi|yatırıl|beyan edilir", s)
+    return bool(zaman and kural and not re.search(r"ödedim|ödendi|ödemiş", s))
+
+
+def takvim_cevabi(soru):
+    """Takvim sorusuysa ilgili paragraf(lar)ı AYNEN döndürür, değilse None."""
+    if not takvim_kalibi(soru):
+        return None
+    s = soru.replace("İ", "i").replace("I", "ı").lower()
+    paragraflar = [p.strip() for p in (BELGE_DIR / TAKVIM).read_text(encoding="utf-8").split("\n\n")]
+    basliklar = list(dict.fromkeys(b for k, b in _TAKVIM_TURLERI if k in s))
+    if "muhtasar" in s or "muhsgk" in s:  # "muhtasar ve PRİM hizmet" ifadesindeki "prim" SGK sayılmasın
+        basliklar = [b for b in basliklar if b != "SGK primi" or re.search(r"sgk", s)]
+    if not basliklar and re.search(r"beyan|vergi|vergiler", s):  # tür yok: "beyannameler ne zaman verilir"
+        basliklar = list(dict.fromkeys(b for _k, b in _TAKVIM_TURLERI))
+    secilen = [p for p in paragraflar if any(p.startswith(b) for b in basliklar)]
+    if not secilen:
+        return None
+    tatil = next((p for p in paragraflar if p.startswith("Son gün resmi tatil")), "")
+    metin = " ".join(" ".join(secilen + [tatil]).split())  # satır sonlarını tek boşluğa indir
+    return f"{metin} [kaynak: {TAKVIM}]"
+
+
+# ---------- Beyanname tutar soruları: firmanın o ayki beyannamesinden AYNEN satır ----------
+# "Temmuz muhtasar beyannamesinde ne kadar bildirildi?" — aynı belgede Muhtasar, SGK ve ücret rakamları
+# yan yana; küçük model bazen yanlış satırı (SGK) seçiyordu. Tür + ay belliyse satırı KOD bulur.
+_BEYAN_SATIRLARI = {  # tür -> (dosya türü, aranacak satır başları)
+    "Muhtasar": ("MUHSGK", ["Muhtasar (gelir vergisi stopajı) ödenecek tutar", "Muhtasar son ödeme tarihi"]),
+    "SGK primi": ("MUHSGK", ["SGK primi ödenecek tutar", "SGK primi son ödeme tarihi"]),
+    "KDV": ("KDV", ["Ödenecek KDV", "Son ödeme tarihi"]),
+}
+
+
+def beyanname_satiri(soru, firma_id):
+    """Ay + tür + tutar soruluyorsa o firmanın beyannamesinden ilgili satırlar; değilse None."""
+    s = soru.replace("İ", "i").replace("I", "ı").lower()
+    donem = soru_donemi(soru)
+    if not (donem and "beyan" in s and re.search(r"ne kadar|tutar|bildiril|ödenecek|kaç tl|kaç lira", s)):
+        return None
+    turler = []
+    if "kdv" in s:
+        turler.append("KDV")
+    if "muhtasar" in s:
+        turler.append("Muhtasar")
+    if re.search(r"sgk|prim\b|primi", s):
+        turler.append("SGK primi")
+    if not turler and re.search(r"muhsgk|prim hizmet", s):
+        turler = ["Muhtasar", "SGK primi"]
+    satirlar, kaynak = [], None
+    for tur in turler:
+        dosya_turu, baslar = _BEYAN_SATIRLARI[tur]
+        dosya = f"{firma_id}_{dosya_turu}_{donem}.txt"  # firma_id oturumdan: yalnız KENDİ beyannamesi
+        yol = BELGE_DIR / dosya
+        if not yol.exists():
+            return None  # o döneme ait beyanname yok -> normal akış (çekimser kalır)
+        metin = yol.read_text(encoding="utf-8").splitlines()
+        satirlar += [next(x for x in metin if x.startswith(b)) for b in baslar if any(x.startswith(b) for x in metin)]
+        kaynak = kaynak or dosya
+    if not satirlar or len({_BEYAN_SATIRLARI[t][0] for t in turler}) > 1:
+        return None  # farklı beyannameler (KDV + muhtasar) birlikte: tek kaynağa sığmaz, modele bırak
+    return f"{'; '.join(satirlar)}. [kaynak: {kaynak}]"
+
+
 def cevapla_belge(soru, firma_id):
     """retrieve -> rerank -> generate (JSON) -> kanıt eşleştirme -> atıf doğrulama.
     Döner: {"cevap" ('... [kaynak: x.txt]'), "kaynaklar" (getirilen), "atif", "kanit", "parcalar"}"""
+    takvim = takvim_cevabi(soru)
+    if takvim:  # genel son tarih kuralı: ORTAK takvimden aynen (firma filtresi gerekmez, herkes görür)
+        return {"cevap": takvim, "kaynaklar": [TAKVIM], "atif": validate_citations(takvim, [TAKVIM]),
+                "kanit": {"kaynak": TAKVIM}, "parcalar": []}
+    satir = beyanname_satiri(soru, firma_id)
+    if satir:  # belirli ay + tür tutarı: firmanın kendi beyannamesinden aynen
+        dosya = satir.rsplit("[kaynak: ", 1)[1].rstrip("]")
+        return {"cevap": satir, "kaynaklar": [dosya], "atif": validate_citations(satir, [dosya]),
+                "kanit": {"kaynak": dosya}, "parcalar": []}
     parcalar = getir(soru, firma_id)
     kaynaklar = list(dict.fromkeys(d.metadata["kaynak"] for d, _b, _l in parcalar))
     sonuc = {"cevap": CEKIMSER, "kaynaklar": kaynaklar, "atif": None, "kanit": None, "parcalar": parcalar}
@@ -164,7 +251,8 @@ def _kontrol():
         bas = time.time()
         r = cevapla_belge(soru, firma)
         sure = time.time() - bas
-        top3 = [d.metadata["kaynak"] for d, _b, _l in r["parcalar"]]
+        # Takvim / beyanname satırı aramasız doğrudan okunur: o zaman "getirilen" = cevabın kaynağı
+        top3 = [d.metadata["kaynak"] for d, _b, _l in r["parcalar"]] or r["kaynaklar"]
         hit3 = kaynak is None or kaynak in top3
         icerik = all(b.lower() in r["cevap"].lower() for b in beklenen)
         if kaynak and tid != "T15":  # cevaptaki atıf beklenen dosya mı? (T15: genel bilgi + talimata uymama)

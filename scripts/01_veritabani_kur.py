@@ -15,6 +15,7 @@ import bcrypt
 # scripts/ klasöründen çalıştırınca "app" paketini bulabilmek için proje kökünü ekle
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.config import CSV_DIR, DB_YOLU  # noqa: E402
+from app.db import bordro_tablolari_kur  # noqa: E402
 
 SEMA = """
 CREATE TABLE firmalar (
@@ -158,6 +159,10 @@ def kur():
         "belgeler": ekle(con, "belgeler", csv_oku("belgeler.csv"),
                          ["id", "firma_id", "tur", "donem", "dosya_adi"]),
     }
+    # Kurgusal çalışanlar + aylık bordro (CSV'yi scripts/00_bordro_uret.py üretir)
+    bordro_tablolari_kur(con)
+    for tablo in ("calisanlar", "bordrolar"):
+        sonuc[tablo] = con.execute(f"SELECT COUNT(*) FROM {tablo}").fetchone()[0]
     con.commit()
     return con, sonuc
 

@@ -14,7 +14,8 @@ sys.path.insert(0, str(KOK))
 
 import app.db as db  # noqa: E402
 from app.dogrulama import kanit_eslestir  # noqa: E402
-from app.bordro import bordro_cevabi, bordro_kayitlari  # noqa: E402
+from app.bordro import bordro_cevabi, bordro_kalibi, calisan_bul  # noqa: E402
+from app.rag import takvim_cevabi  # noqa: E402
 from app.kayit import cevapla_kayit, planli_aciklama_cevabi, tl  # noqa: E402
 from app.niyet import kural_duzelt  # noqa: E402
 
@@ -147,27 +148,102 @@ def test_tahmin_kayit_varsa_gercek_tutar():
     assert "tahmin değil, kayıtta var" in r["cevap"] and "tahmindir" not in r["cevap"]
 
 
-# --- Maaş soruları RAG'da "kayıtlarınızda yok" diyordu; beyannamedeki brüt ücretten hesaplanır ---
-def test_bordro_toplam_ve_ortalama():
-    kayitlar = bordro_kayitlari("F001")
-    son = kayitlar[-1]
-    toplam = bordro_cevabi("bir ayda ödenen toplam maaş miktarı ne kadar", "F001")
-    assert tl(son["brut"]) in toplam["cevap"] and toplam["kaynaklar"] == [son["kaynak"]]
-    ort = bordro_cevabi("ortalama net maaş ne kadar", "F001")
-    assert "Net maaş tutarı kayıtlarınızda yok" in ort["cevap"]  # net UYDURULMAZ
-    assert tl(round(son["brut"] / son["calisan"], 2)) in ort["cevap"]
+# --- Maaş / çalışan soruları: bordrolar tablosundan, hesap Python'da (RAG "kayıtlarınızda yok" diyordu) ---
+def _ay_toplami(firma, donem):
+    return next(r for r in db.calistir("bordro_aylik_toplam", firma) if r["donem"] == donem)
 
 
-def test_bordro_birkac_ay_ve_olmayan_ay():
-    r = bordro_cevabi("son 3 ayda ödenen maaşlar", "F001")
-    assert len(r["kaynaklar"]) == 3 and "Toplam" in r["cevap"]
-    assert "kayıtlarınızda yok" in bordro_cevabi("ocak ayı maaşları", "F001")["cevap"]
+def test_bordro_verisi_beyannameyle_tutarli():
+    for r in db.calistir("bordro_aylik_toplam", "F001"):
+        muh = db.calistir("durum", "F001", "Muhtasar", r["donem"])[0]["tutar_tl"]
+        assert r["gelir_vergisi_tl"] == muh and r["brut_tl"] == round(muh / 0.15, 2)
+        assert r["net_tl"] == round(r["brut_tl"] - r["sgk_isci_tl"] - r["issizlik_isci_tl"]
+                                    - r["gelir_vergisi_tl"] - r["damga_vergisi_tl"], 2)
 
 
-@pytest.mark.parametrize("soru", ["ev satın alma ücreti ne", "KDV ne zaman ödenir?"])
-def test_bordro_disindaki_sorular_ragda_kalir(soru):
-    assert bordro_cevabi(soru, "F001") is None
+def test_bordro_toplam_ve_ortalama_net():
+    son = _ay_toplami("F001", "2026-10")
+    toplam = bordro_cevabi("bir ayda ödenen toplam maaş miktarı ne kadar", "F001")["cevap"]
+    assert tl(son["net_tl"]) in toplam and tl(son["brut_tl"]) in toplam
+    ort = bordro_cevabi("ortalama net maaş ne kadar", "F001")["cevap"]
+    assert tl(round(son["net_tl"] / son["kisi"], 2)) in ort
+
+
+def test_elemanlara_odenen_tutarlar_kisi_kisi():
+    r = bordro_cevabi("elemanlara ödenen tutarlar", "F001")
+    assert len(r["satirlar"]) == 24 and all(s["donem"] == "2026-10" for s in r["satirlar"])
+    assert tl(_ay_toplami("F001", "2026-10")["net_tl"]) in r["cevap"]
+
+
+def test_calisana_ozel_odeme():
+    kisi = db.calistir("calisan_listesi", "F001")[0]
+    ad, soyad = kisi["ad_soyad"].split()
+    r = bordro_cevabi(f"{ad}'ya eylülde ne kadar maaş ödendi", "F001")
+    eylul = next(s for s in db.calistir("calisan_bordrosu", "F001", kisi["id"]) if s["donem"] == "2026-09")
+    assert kisi["ad_soyad"] in r["cevap"] and tl(eylul["net_tl"]) in r["cevap"]
+    tum = bordro_cevabi(f"{ad} {soyad} ne kadar maaş aldı", "F001")
+    assert len(tum["satirlar"]) == 6 and "Toplam net" in tum["cevap"]
+
+
+def test_en_yuksek_ve_en_dusuk_maas():
+    ekim = db.calistir("ay_bordrosu", "F001", "2026-10")
+    assert ekim[0]["ad_soyad"] in bordro_cevabi("en yüksek maaşı kim alıyor", "F001")["cevap"]
+    r = bordro_cevabi("en düşük 3 maaş", "F001")
+    assert [s["id"] for s in r["satirlar"]] == [s["id"] for s in ekim[::-1][:3]]
+
+
+def test_beyannamedeki_net_ucret_toplami():  # RAG ortalamayı toplam diye veriyordu
+    r = bordro_cevabi("Ekim muhtasar beyannamesinde net ücret toplamı ne kadar", "F001")["cevap"]
+    assert tl(_ay_toplami("F001", "2026-10")["net_tl"]) in r
+
+
+def test_bordro_olmayan_ay():
+    assert "bordrosu kayıtlarınızda yok" in bordro_cevabi("bu ay maaşlara ne kadar ödedim", "F001")["cevap"]
+
+
+def test_turkce_ek_ile_isim_eslesir():
+    calisanlar = [{"id": "C1", "ad_soyad": "Ayşe Yılmaz"}, {"id": "C2", "ad_soyad": "Ayşegül Kaya"}]
+    assert [c["id"] for c in calisan_bul("ayşeye ne kadar ödedim", calisanlar)] == ["C1"]
+    assert [c["id"] for c in calisan_bul("Ayşe'nin maaşı", calisanlar)] == ["C1"]
+
+
+@pytest.mark.parametrize("soru", ["ev satın alma ücreti ne", "KDV ne zaman ödenir?", "firmamızda kaç personel var",
+                                  "Kaya Market'e ne kadar ödedim", "Ekim muhtasar beyannamesinde ödenecek tutar ne"])
+def test_bordro_disindaki_sorular(soru):
+    assert not bordro_kalibi(soru, "F001")
 
 
 def test_bordro_firma_izolasyonu():
-    assert all(k["kaynak"].startswith("F002_") for k in bordro_kayitlari("F002"))
+    f1 = {c["id"] for c in db.calistir("calisan_listesi", "F001")}
+    r = bordro_cevabi("elemanlara ödenen tutarlar", "F001")
+    assert all(s["firma_id"] == "F001" and s["calisan_id"] in f1 for s in r["satirlar"])
+    # Başka firmanın çalışan adı sorulursa bulunmaz (yalnız kendi listesinde aranır)
+    f1_isimler = {p for x in db.calistir("calisan_listesi", "F001") for p in x["ad_soyad"].split()}
+    f2_yalniz = [c for c in db.calistir("calisan_listesi", "F002") if not set(c["ad_soyad"].split()) & f1_isimler]
+    assert calisan_bul(f2_yalniz[0]["ad_soyad"] + " maaşı", db.calistir("calisan_listesi", "F001")) == []
+
+
+# --- Takvim soruları: model cümleyi bozuyordu ("28 Ekim'de ödüllendirilir"); takvimden AYNEN alıntı ---
+@pytest.mark.parametrize("soru, olmali", [
+    ("KDV ne zaman ödenir?", "28'i"), ("Muhtasar ne zaman ödenir?", "26'sına"),
+    ("SGK primi ne zaman ödenir?", "son gününe"), ("Geçici vergi ne zaman ödenir?", "17'si"),
+])
+def test_takvim_aynen_alinti(soru, olmali):
+    c = takvim_cevabi(soru)
+    assert olmali in c and c.endswith("[kaynak: vergi_takvimi.txt]")
+
+
+@pytest.mark.parametrize("soru", ["Ekim KDV ne zaman ödedim", "SGK primini geç ödersem ne olur?"])
+def test_takvim_disindaki_sorular(soru):
+    assert takvim_cevabi(soru) is None
+
+
+# --- Beyanname tutarı: aynı belgede Muhtasar/SGK/ücret yan yana; model yanlış satırı seçebiliyordu (T07) ---
+@pytest.mark.parametrize("soru, firma, olmali, kaynak", [
+    ("Temmuz muhtasar beyannamesinde ne kadar bildirildi?", "F003", "5.663,02", "F003_MUHSGK_2026-07.txt"),
+    ("Eylül KDV beyannamemde ödenecek KDV ne kadardı?", "F001", "44.307,46", "F001_KDV_2026-09.txt"),
+])
+def test_beyanname_satiri_aynen(soru, firma, olmali, kaynak):
+    from app.rag import beyanname_satiri
+    c = beyanname_satiri(soru, firma)
+    assert olmali in c and c.endswith(f"[kaynak: {kaynak}]")

@@ -269,6 +269,10 @@ def cevapla_kayit(soru, firma_id, niyet):
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
         return tahmin_cevabi(firma_id, *parametreler)
+    if sorgu == "bordro":  # çalışan/maaş: app/bordro.py (döngüsel import olmasın diye burada)
+        from app.bordro import bordro_cevabi
+        return bordro_cevabi(soru, firma_id) or {"cevap": CEKIMSER, "kaynaklar": [], "satirlar": [],
+                                                  "yontem": "cekimser"}
     satirlar = calistir(sorgu, firma_id, *parametreler)
     if not satirlar:  # Kural 4: model çağrılmaz
         bos = BOS_SONUC.get(sorgu)  # bazı sorgularda "kayıt yok" da bir cevaptır

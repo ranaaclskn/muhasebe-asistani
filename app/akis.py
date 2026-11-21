@@ -24,8 +24,8 @@ from langgraph.types import Command, interrupt
 from app.config import VERI_DIR
 from app.db import belge_bul, firma_talepleri, kayitli_eposta, planli_islem_ekle, talep_ekle
 from app.emirler import (EKSIK_SORULARI, alan_cozumle, emir_cikar, evet_mi, iptal_mi,
-                         talep_no_bul, talep_sorgu_kalibi)
-from app.bordro import bordro_cevabi
+                         emir_kalibi, talep_no_bul, talep_sorgu_kalibi)
+from app.bordro import bordro_kalibi
 from app.kayit import cevapla_kayit, donem_tr, planli_aciklama_cevabi, tarih_tr, tl
 from app.log import log_yaz
 from app.niyet import baska_firma_adi, niyet_belirle
@@ -63,6 +63,10 @@ def niyet_dugumu(d: Durum):
         return {"niyet": {"niyet": "baska_firma", "firma": baska}}
     if talep_sorgu_kalibi(d["soru"]):  # "3 numaralı talebim ne durumda" (atölye SORGULA kolu)
         return {"niyet": {"niyet": "sorgula"}}
+    # Çalışan / maaş / bordro: modelden ÖNCE kod tanır ("Ayşe'ye ne kadar ödedim" modelde vergi
+    # ödemelerine gidiyordu). Emir cümleleri ("bordroyu gönder") emir kolunda kalır.
+    if not emir_kalibi(d["soru"]) and bordro_kalibi(d["soru"], d["firma_id"]):
+        return {"niyet": {"niyet": "kayit", "sorgu": "bordro", "parametreler": []}}
     return {"niyet": niyet_belirle(d["soru"])}
 
 
@@ -76,10 +80,6 @@ def rag_dugumu(d: Durum):
     kendi = planli_aciklama_cevabi(d["soru"], d["firma_id"])
     if kendi:
         return {"cevap": kendi["cevap"], "kaynaklar": kendi["kaynaklar"], "arac": "sql"}
-    # Maaş/ücret soruları: beyannamedeki brüt ücret + çalışan sayısından KOD hesaplar (RAG hesap yapamıyordu)
-    bordro = bordro_cevabi(d["soru"], d["firma_id"])
-    if bordro:
-        return {"cevap": bordro["cevap"], "kaynaklar": bordro["kaynaklar"], "arac": "belge"}
     r = cevapla_belge(d["soru"], d["firma_id"])
     kaynak = [r["kanit"]["kaynak"]] if r["atif"] else []  # yalnızca cevapta kullanılan kaynak
     return {"cevap": r["cevap"], "kaynaklar": kaynak, "arac": "rag"}

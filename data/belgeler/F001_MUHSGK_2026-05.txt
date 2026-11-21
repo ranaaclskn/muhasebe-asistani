@@ -16,4 +16,14 @@ Matrah özeti:
 - Brüt ücret toplamı: 118.582,60 TL
 - Prime esas kazanç toplamı: 142.390,69 TL
 
+Ücret ödemeleri özeti (24 çalışan, bordro toplamı):
+- Brüt ücret toplamı: 118.582,60 TL
+- SGK işçi payı kesintisi (%14): 16.601,55 TL
+- İşsizlik sigortası işçi payı kesintisi (%1): 1.185,83 TL
+- Gelir vergisi kesintisi (muhtasar): 17.787,39 TL
+- Damga vergisi kesintisi: 900,06 TL
+- Çalışanlara ödenen net ücret toplamı: 82.107,77 TL
+- Çalışan başına ortalama net ücret: 3.421,16 TL
+- Ücret ödeme tarihi: 31.05.2026
+
 Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: Y002, Y003)

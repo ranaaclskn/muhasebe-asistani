@@ -1,0 +1,72 @@
+id,firma_id,ad_soyad,gorev,ise_giris
+C001,F001,Gamze Karaca,Genel müdür,2024-02-04
+C002,F001,Fatma Şahin,Üretim şefi,2018-10-05
+C003,F001,Aslı Uçar,Muhasebe uzmanı,2024-09-11
+C004,F001,Gizem Kaya,Kalite kontrol uzmanı,2021-06-25
+C005,F001,Pınar Öztürk,Kalite kontrol uzmanı,2022-08-09
+C006,F001,Sinan Yılmaz,Satış temsilcisi,2023-09-26
+C007,F001,Özge Aydın,Satış temsilcisi,2025-06-17
+C008,F001,Tuba Bulut,Depo sorumlusu,2022-05-06
+C009,F001,Büşra Korkmaz,Şoför,2022-12-22
+C010,F001,Merve Karaca,Şoför,2023-05-16
+C011,F001,Selin Bulut,Paketleme elemanı,2022-11-12
+C012,F001,Zeynep Çelik,Paketleme elemanı,2019-03-05
+C013,F001,Hakan Avcı,Paketleme elemanı,2020-01-23
+C014,F001,Ebru Koç,Paketleme elemanı,2025-08-10
+C015,F001,Onur Yıldırım,Üretim operatörü,2019-11-22
+C016,F001,Emre Bulut,Üretim operatörü,2025-05-21
+C017,F001,Ahmet Yılmaz,Üretim operatörü,2017-12-24
+C018,F001,Esra Özkan,Üretim operatörü,2019-05-13
+C019,F001,Sevgi Yıldız,Üretim operatörü,2020-05-03
+C020,F001,Erkan Şahin,Üretim operatörü,2017-06-21
+C021,F001,Hatice Arslan,Üretim operatörü,2016-01-17
+C022,F001,Levent Özkan,Üretim operatörü,2022-11-07
+C023,F001,Cem Kılıç,Üretim operatörü,2021-12-02
+C024,F001,Volkan Aslan,Üretim operatörü,2017-11-19
+C025,F002,Orhan Çelik,Genel müdür,2018-09-08
+C026,F002,Kemal Çelik,Yazılım ekip lideri,2021-05-25
+C027,F002,Burak Yıldız,Yazılım ekip lideri,2024-10-03
+C028,F002,Büşra Özdemir,Yazılım ekip lideri,2019-12-01
+C029,F002,Pınar Bulut,Proje yöneticisi,2019-01-10
+C030,F002,Hatice Çelik,Proje yöneticisi,2024-11-05
+C031,F002,Selin Bulut,Kıdemli yazılım geliştirici,2017-03-25
+C032,F002,Aslı Kaya,Kıdemli yazılım geliştirici,2017-04-18
+C033,F002,Halil Yıldız,Kıdemli yazılım geliştirici,2023-11-21
+C034,F002,Serkan Demir,Kıdemli yazılım geliştirici,2020-08-19
+C035,F002,Hakan Özkan,Kıdemli yazılım geliştirici,2019-04-10
+C036,F002,Melike Yılmaz,Kıdemli yazılım geliştirici,2020-04-24
+C037,F002,Volkan Uçar,Kıdemli yazılım geliştirici,2022-03-19
+C038,F002,Oğuz Avcı,Kıdemli yazılım geliştirici,2016-06-22
+C039,F002,Nermin Çelik,Test uzmanı,2025-01-02
+C040,F002,Sibel Uçar,Test uzmanı,2021-11-11
+C041,F002,Ahmet Polat,Test uzmanı,2019-03-01
+C042,F002,Mustafa Erdem,Test uzmanı,2016-05-11
+C043,F002,Sinan Arslan,İnsan kaynakları uzmanı,2022-11-17
+C044,F002,Filiz Ünal,Muhasebe uzmanı,2024-11-11
+C045,F002,Murat Çelik,Destek uzmanı,2016-08-05
+C046,F002,Yasemin Aydın,Destek uzmanı,2020-07-03
+C047,F002,Cem Karaca,Destek uzmanı,2024-11-16
+C048,F002,Levent Tekin,Destek uzmanı,2024-07-04
+C049,F002,Ebru Doğan,Yazılım geliştirici,2020-10-12
+C050,F002,Onur Ünal,Yazılım geliştirici,2019-03-19
+C051,F002,Kaan Korkmaz,Yazılım geliştirici,2025-06-11
+C052,F002,Zeynep Demir,Yazılım geliştirici,2023-12-16
+C053,F002,Erkan Kılıç,Yazılım geliştirici,2022-09-28
+C054,F002,Tuba Doğan,Yazılım geliştirici,2023-10-19
+C055,F002,Taner Demir,Yazılım geliştirici,2019-05-18
+C056,F002,Mehmet Aslan,Yazılım geliştirici,2017-10-26
+C057,F002,Ayşe Uçar,Yazılım geliştirici,2018-06-25
+C058,F002,Elif Yıldırım,Yazılım geliştirici,2017-03-25
+C059,F002,Tolga Erdem,Yazılım geliştirici,2023-09-12
+C060,F002,Merve Arslan,Yazılım geliştirici,2019-03-22
+C061,F002,Emre Yıldırım,Yazılım geliştirici,2018-02-12
+C062,F002,Fatma Korkmaz,Yazılım geliştirici,2018-02-05
+C063,F003,Tolga Yıldırım,Atölye ustası,2019-07-20
+C064,F003,Elif Aydın,Atölye ustası,2023-10-08
+C065,F003,Pınar Özkan,Büro elemanı,2018-11-27
+C066,F003,Orhan Arslan,Ütü ve paket elemanı,2016-05-24
+C067,F003,Volkan Uçar,Ütü ve paket elemanı,2021-12-08
+C068,F003,Erkan Aslan,Dikiş operatörü,2016-02-25
+C069,F003,Mustafa Kaya,Dikiş operatörü,2023-04-26
+C070,F003,Onur Ünal,Dikiş operatörü,2018-09-16
+C071,F003,Sinan Demir,Dikiş operatörü,2020-03-21

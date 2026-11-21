@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.config import BELGE_DIR, DB_YOLU  # noqa: E402
+from app.db import bordro_tablolari_kur  # noqa: E402
 
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz",
          "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
@@ -67,7 +68,17 @@ Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: {yid})
 """
 
 
-def muhsgk_metni(firma, donem, muh, sgk):
+def bordro_ozeti(con, firma_id, donem):
+    """O ayın bordro toplamları (scripts/00_bordro_uret.py -> bordrolar tablosu); yoksa None."""
+    r = con.execute(
+        "SELECT COUNT(*) kisi, ROUND(SUM(brut_tl), 2) brut, ROUND(SUM(sgk_isci_tl), 2) sgk, "
+        "ROUND(SUM(issizlik_isci_tl), 2) iss, ROUND(SUM(gelir_vergisi_tl), 2) gv, "
+        "ROUND(SUM(damga_vergisi_tl), 2) damga, ROUND(SUM(net_tl), 2) net, MAX(odeme_tarihi) odeme "
+        "FROM bordrolar WHERE firma_id = ? AND donem = ?", (firma_id, donem)).fetchone()
+    return r if r and r["kisi"] else None
+
+
+def muhsgk_metni(firma, donem, muh, sgk, bordro=None):
     muh_id, muhtasar, muh_son, _ = muh
     sgk_id, prim, sgk_son, _ = sgk
     brut_ucret = round(muhtasar / 0.15, 2)         # kurgusal: stopaj ≈ %15
@@ -89,8 +100,25 @@ Muhtasar ve SGK primi toplamı: {tl(muhtasar + prim)}
 Matrah özeti:
 - Brüt ücret toplamı: {tl(brut_ucret)}
 - Prime esas kazanç toplamı: {tl(prime_esas)}
-
+{ucret_ozeti(bordro)}
 Not: Bu belge demo amaçlı kurgusal bir beyanname özetidir. (Kayıt no: {muh_id}, {sgk_id})
+"""
+
+
+def ucret_ozeti(b):
+    """Brütten nete: kesintiler ve çalışanlara ödenen NET ücret toplamı (bordro varsa)."""
+    if not b:
+        return ""
+    return f"""
+Ücret ödemeleri özeti ({b['kisi']} çalışan, bordro toplamı):
+- Brüt ücret toplamı: {tl(b['brut'])}
+- SGK işçi payı kesintisi (%14): {tl(b['sgk'])}
+- İşsizlik sigortası işçi payı kesintisi (%1): {tl(b['iss'])}
+- Gelir vergisi kesintisi (muhtasar): {tl(b['gv'])}
+- Damga vergisi kesintisi: {tl(b['damga'])}
+- Çalışanlara ödenen net ücret toplamı: {tl(b['net'])}
+- Çalışan başına ortalama net ücret: {tl(round(b['net'] / b['kisi'], 2))}
+- Ücret ödeme tarihi: {tarih_tr(b['odeme'])}
 """
 
 
@@ -168,6 +196,7 @@ def uret():
     BELGE_DIR.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_YOLU)
     con.row_factory = sqlite3.Row
+    bordro_tablolari_kur(con)  # bordro tabloları yoksa CSV'den kur (net ücret özeti için)
     firmalar = {r["id"]: dict(r) for r in con.execute("SELECT * FROM firmalar")}
 
     yazilan = 0
@@ -183,7 +212,7 @@ def uret():
             else:  # MUHSGK
                 muh = yukumluluk(con, b["firma_id"], "Muhtasar", b["donem"])
                 sgk = yukumluluk(con, b["firma_id"], "SGK primi", b["donem"])
-                metin = muhsgk_metni(firma, b["donem"], muh, sgk)
+                metin = muhsgk_metni(firma, b["donem"], muh, sgk, bordro_ozeti(con, b["firma_id"], b["donem"]))
         dosya.write_text(metin, encoding="utf-8")
         yazilan += 1
     return con, yazilan
