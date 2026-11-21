@@ -38,21 +38,21 @@ st.markdown("""
 :root { --brand:#12355b; --ink:#1f2937; --muted:#6b7280; --line:#e2e6ec; --bg:#f4f6f9;
         --good:#1a7f37; --bad:#b42318; --warn:#9a6700; }
 .stApp { background: var(--bg); }
-.block-container { padding-top: 1.4rem; padding-bottom: 2rem; max-width: 1420px; }
+.block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1420px; }
 [data-testid="stHeader"] { background: transparent; }
 .sayisal { font-variant-numeric: tabular-nums; }
 
 /* Sayfa başlığı */
 .ust-bar { background:#fff; border:1px solid var(--line); border-top:3px solid var(--brand); border-radius:8px;
-           padding:16px 22px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+           padding:10px 20px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
 .ust-bar .ust-etiket { color:var(--muted); font-size:.72rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; }
-.ust-bar .unvan { font-size:1.4rem; font-weight:700; color:var(--ink); line-height:1.25; }
+.ust-bar .unvan { font-size:1.25rem; font-weight:700; color:var(--ink); line-height:1.25; }
 .ust-bar .meta { color:var(--muted); font-size:.86rem; margin-top:2px; }
 .ust-bar .sag { text-align:right; color:var(--muted); font-size:.85rem; line-height:1.5; }
 .ust-bar .sag b { color:var(--ink); font-weight:600; }
 
 /* Özet kartları */
-.kpi { background:#fff; border:1px solid var(--line); border-radius:8px; padding:14px 18px; height:100%; }
+.kpi { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 16px; height:100%; }
 .kpi .etiket { color:var(--muted); font-size:.72rem; font-weight:600; letter-spacing:.07em; text-transform:uppercase; }
 .kpi .deger { color:var(--ink); font-size:1.45rem; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
 .kpi .alt { color:var(--muted); font-size:.83rem; margin-top:2px; }
@@ -76,6 +76,13 @@ st.markdown("""
 
 /* Asistan */
 .st-key-sohbet_kutu { background:#f8f9fb; border:1px solid var(--line); border-radius:6px; }
+/* Asistan (giriş kutusu dahil) ilk ekrana sığsın: sohbet alanının yüksekliği ekran boyuna göre.
+   Streamlit sabit yüksekliği kutunun üst katmanına (stLayoutWrapper) flex ile verir; onu eziyoruz. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-sohbet_kutu) {
+    flex:0 0 max(260px, calc(100vh - 365px)) !important; height:max(260px, calc(100vh - 365px)) !important; }
+/* Sekme değişince sayfa kaymasın: sekme içerikleri sabit yükseklikte, taşan kısım kendi içinde kayar */
+.st-key-alt_kart [role="tabpanel"] { height:500px; overflow-y:auto; overflow-x:hidden; }
+.st-key-grafik_kart [role="tabpanel"] { height:150px; overflow-y:auto; overflow-x:hidden; }
 .st-key-sohbet_kutu [data-testid="stChatMessage"] { background:#fff; border:1px solid var(--line); border-radius:6px;
                                                     padding:10px 14px; }
 .st-key-sohbet_kutu [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
@@ -274,25 +281,27 @@ def asistan_bolumu(k, firma_id):
                     if m.get("kaynak"):
                         st.caption(m["kaynak"])
 
-        # Asistan bir soru sorduysa (LangGraph interrupt) sonraki mesaj o soruya CEVAP olarak gider
-        soru = None
-        html(f'<div class="bolum-etiket">{"Hızlı cevap" if bekleyen else "Sık sorulanlar"}</div>')
-        with st.container(horizontal=True, gap="small", key="oneriler"):
-            if bekleyen and bekleyen.get("tur") == "onay":  # onay sorusunda butonlar da var
-                if st.button("Evet", key="evet", icon=":material/check:"):
-                    soru = "evet"
-                if st.button("Hayır", key="hayir", icon=":material/close:"):
-                    soru = "hayır"
-            elif bekleyen:
-                if st.button("Vazgeç", key="vazgec", icon=":material/undo:"):
-                    soru = "vazgeç"
-            else:
-                for i, oneri in enumerate(ONERILER):
-                    if st.button(oneri, key=f"oneri_{i}"):
-                        soru = oneri
-                if st.session_state.mesajlar:
-                    st.button("Sohbeti temizle", key="temizle", icon=":material/restart_alt:",
-                              on_click=sohbet_temizle)
+            # Butonlar sohbet kutusunun İÇİNDE, son mesajın altında: kutunun altında yalnızca yazma alanı kalır,
+            # böylece asistan (yazma alanı dahil) sayfa açılır açılmaz ekrana sığar.
+            # Asistan bir soru sorduysa (LangGraph interrupt) sonraki mesaj o soruya CEVAP olarak gider.
+            soru = None
+            html(f'<div class="bolum-etiket">{"Hızlı cevap" if bekleyen else "Sık sorulanlar"}</div>')
+            with st.container(horizontal=True, gap="small", key="oneriler"):
+                if bekleyen and bekleyen.get("tur") == "onay":  # onay sorusunda butonlar da var
+                    if st.button("Evet", key="evet", icon=":material/check:"):
+                        soru = "evet"
+                    if st.button("Hayır", key="hayir", icon=":material/close:"):
+                        soru = "hayır"
+                elif bekleyen:
+                    if st.button("Vazgeç", key="vazgec", icon=":material/undo:"):
+                        soru = "vazgeç"
+                else:
+                    for i, oneri in enumerate(ONERILER):
+                        if st.button(oneri, key=f"oneri_{i}"):
+                            soru = oneri
+                    if st.session_state.mesajlar:
+                        st.button("Sohbeti temizle", key="temizle", icon=":material/restart_alt:",
+                                  on_click=sohbet_temizle)
 
         ipucu = "Cevabınızı yazın (iptal için: vazgeç)" if bekleyen else "Sorunuzu yazın…"
         yazilan = st.chat_input(ipucu, key="sohbet_girdi")
@@ -408,7 +417,6 @@ def firma_paneli(k):
     html(f'<div class="ust-bar"><div><div class="ust-etiket">Genel bakış</div>'
          f'<div class="unvan">{escape(k["unvan"])}</div><div class="meta">{escape(meta)}</div></div>'
          f'<div class="sag"><b>{bugun_tr()}</b><br>{escape(k["ad"])}</div></div>')
-    st.write("")
 
     satirlar = yukumlulukler(firma_id)
     bu_ay = [s for s in satirlar if s["son_odeme_tarihi"][:7] == BUGUN[:7] and s["durum"] != "Ödendi"]
@@ -418,27 +426,25 @@ def firma_paneli(k):
     pencere = st.session_state.get("pencere") or "Son 3 ay"
     df = aylik_tablo(firma_id, pencere)
 
-    c1, c2, c3, c4 = st.columns(4)
-    kpi(c1, "Bu ay ödenecek", tl(sum(s["tutar_tl"] for s in bu_ay)), f"{len(bu_ay)} ödeme")
-    kpi(c2, "Geciken ödeme", len(geciken),
-        tl(sum(s["tutar_tl"] for s in geciken)) if geciken else "Gecikme yok", "kotu" if geciken else "")
-    if yaklasan:
-        kpi(c3, "En yakın son tarih", tarih_tr(yaklasan[0]["son_odeme_tarihi"]),
-            f"{yaklasan[0]['tur']} · {tl(yaklasan[0]['tutar_tl'])}")
-    else:
-        kpi(c3, "En yakın son tarih", "—", "Bekleyen ödeme yok")
-    if not df.empty:
-        net = df["net"].sum()
-        kpi(c4, f"Net durum · {pencere.lower()}", ("+" if net > 0 else "") + kisa_tl(net),
-            "Gelir giderden fazla" if net >= 0 else "Gider gelirden fazla", "iyi" if net >= 0 else "kotu")
-    st.write("")
-
     sol, sag = st.columns([1.2, 1], gap="medium")
-    with sol:
+    with sol:  # asistan sayfa açılır açılmaz görünür (yüksekliği ekrana göre CSS ile ayarlanır)
         asistan_bolumu(k, firma_id)
     with sag:
+        c1, c2 = st.columns(2)
+        kpi(c1, "Bu ay ödenecek", tl(sum(s["tutar_tl"] for s in bu_ay)), f"{len(bu_ay)} ödeme")
+        kpi(c2, "Geciken ödeme", len(geciken),
+            tl(sum(s["tutar_tl"] for s in geciken)) if geciken else "Gecikme yok", "kotu" if geciken else "")
+        c3, c4 = st.columns(2)
+        if yaklasan:
+            kpi(c3, "En yakın son tarih", tarih_tr(yaklasan[0]["son_odeme_tarihi"]),
+                f"{yaklasan[0]['tur']} · {tl(yaklasan[0]['tutar_tl'])}")
+        else:
+            kpi(c3, "En yakın son tarih", "—", "Bekleyen ödeme yok")
+        if not df.empty:
+            net = df["net"].sum()
+            kpi(c4, f"Net durum · {pencere.lower()}", ("+" if net > 0 else "") + kisa_tl(net),
+                "Gelir giderden fazla" if net >= 0 else "Gider gelirden fazla", "iyi" if net >= 0 else "kotu")
         grafik_bolumu(firma_id, df, pencere)
-        st.write("")
         yaklasan_bolumu(firma_id, satirlar)
 
     st.write("")
@@ -452,7 +458,7 @@ def firma_paneli(k):
             renk = {"Gecikti": "color:#b42318;font-weight:600", "Bekliyor": "color:#9a6700;font-weight:600",
                     "Ödendi": "color:#1a7f37"}
             st.dataframe(df_y.style.map(lambda d: renk.get(d, ""), subset=["Durum"]),
-                         hide_index=True, width="stretch")
+                         hide_index=True, width="stretch", height=400)
             csv_indir(df_y, "yukumlulukler.csv")
         with t2:
             planli_bolumu(k, firma_id)
