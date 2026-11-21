@@ -108,7 +108,7 @@ muhasebe-asistani/
 | firmalar.csv | 3 | F001 Demo Gıda Ltd. Şti., F002 Demo Yazılım A.Ş., F003 Demo Tekstil (Şahıs) |
 | kullanicilar.csv | 4 | `sifre_duz` sütunu demo şifresi (Demo2026!); 01 scripti bcrypt'le hash'leyip `sifre_hash` olarak yazar, düz şifreyi DB'ye yazmaz. Muhasebecinin firma_id'si boş |
 | yukumlulukler.csv | 60 | KDV, Muhtasar, SGK primi (Mayıs–Ekim 2026) + Geçici vergi 2026/2 ve 2026/3. Durum: Ödendi / Bekliyor / Gecikti |
-| faturalar.csv | 24 | Eylül–Ekim 2026 alış/satış, kdv_orani 0.1 veya 0.2 |
+| faturalar.csv | 87 | Eylül–Ekim 2026 alış/satış (24) + Mayıs–Kasım 2026 ek satış (FT025–FT087: o ayın gideri × 0,92–1,18), kdv_orani 0.1 veya 0.2 |
 | belgeler.csv | 40 | 36 beyanname dosyası (firma × 6 ay × KDV/MUHSGK) + 4 ORTAK belge |
 | test_seti.csv | 15 | Beklenen niyet, kaynak ve cevap |
 

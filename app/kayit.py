@@ -439,7 +439,7 @@ def _kontrol():
         ("EK5", "F001", "son üç ay kaç tl vergi ödendi", ["422.451,46", "ağustos–ekim 2026"]),
         ("EK6", "F001", "kaç kişi çalışıyor", ["24", "Demo Gıda"]),
         ("EK7", "F002", "bünyemizde kaç firma çalışıyor", ["38", "!Demo Gıda"]),
-        ("EK8", "F001", "Ekim faturalarımı göster", ["73.229,25", "53.940,11", "!127.169,36"]),
+        ("EK8", "F001", "Ekim faturalarımı göster", ["73.229,25", "316.398,84", "!389.628,09"]),
     ]
     gecen = 0
     for tid, firma, soru, beklenen in testler:
