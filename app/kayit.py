@@ -10,7 +10,7 @@ import re
 
 from langchain_ollama import ChatOllama
 
-from app.config import BUGUN, LLM_MODEL, OLLAMA_URL
+from app.config import BUGUN, GECIKME_ZAMMI_AYLIK, LLM_MODEL, OLLAMA_URL
 from app.db import calistir, planli_islemler
 from app.dogrulama import lexical_score
 
@@ -221,10 +221,19 @@ def cevap_dogrula(cevap, veri, satirlar, toplam=None):
 KAVRAMLAR = [r"faiz", r"ceza", r"gecikme zamm", r"\bzam\b", r"indirim", r"iade", r"taksit", r"kredi"]
 
 
+def gecikme_zammi(tutar, gun, aylik_oran=None):
+    """Vergi borcu için TAHMİNİ gecikme zammı (6183 s. Kanun md. 51): her gecikme günü için aylık oranın
+    1/30'u. 54.938,65 TL, 4 gün, %3,7 -> 271,03 TL. Oran .env'deki GECIKME_ZAMMI_AYLIK'tan gelir (uydurulmaz)."""
+    oran = GECIKME_ZAMMI_AYLIK if aylik_oran is None else aylik_oran
+    return round(tutar * oran / 100 / 30 * max(gun, 0), 2)
+
+
 def gecikme_faizi_cevabi(firma_id, ay=None):
-    """'Gecikmiş ödemelerimin faizi ne kadar?' -> gecikmiş borçlar + kaç gündür gecikmiş + DÜRÜST not:
-    faiz / gecikme zammı tutarı kayıtlarda YOK (oran ve ödeme gününe göre vergi dairesi/SGK hesaplar).
-    Ana borç asla 'faiz' diye sunulmaz; oran uydurulmaz."""
+    """'Gecikmiş ödemelerimin faizi ne kadar?' / 'faizleriyle toplam ödenecek tutar' -> gecikmiş borçlar,
+    kaç gündür gecikmiş, BUGÜNE kadarki TAHMİNİ gecikme zammı ve toplam (hepsini Python hesaplar).
+    - Vergi kalemleri: ana borç × aylık oran/30 × gün (oran config'ten; cevapta açıkça yazılır).
+    - SGK primi: gecikme cezası + zammı farklı yöntemle hesaplanır -> tahmin VERİLMEZ, SGK hesaplar.
+    Ana borç asla 'faiz' diye sunulmaz."""
     from datetime import date
     bugun = date.fromisoformat(BUGUN)
     satirlar = [s for s in calistir("gecikmis", firma_id) if not ay or s["son_odeme_tarihi"][:7] == ay]
@@ -232,20 +241,38 @@ def gecikme_faizi_cevabi(firma_id, ay=None):
     if not satirlar:
         return {"cevap": f"{kapsam} ödenmemiş borcunuz yok; bu yüzden gecikme faizi / zammı da doğmaz.",
                 "kaynaklar": [], "satirlar": [], "yontem": "gecikme_faizi"}
-    liste = "\n".join(
-        f"- {s['tur']} ({donem_tr(s['donem'])} dönemi): ana borç **{tl(s['tutar_tl'])}**, son ödeme "
-        f"{tarih_tr(s['son_odeme_tarihi'])} — **{(bugun - date.fromisoformat(s['son_odeme_tarihi'])).days} gündür "
-        f"gecikmiş**" for s in satirlar)
-    toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
-    metin = (f"{kapsam} {len(satirlar)} ödemeniz var:\n\n{liste}\n\n"
-             + (f"Toplam ana borç: **{tl(toplam)}**\n\n" if len(satirlar) > 1 else "")
-             + "**Faiz / gecikme zammı:** Evet, geciken ödemelere gecikme zammı (SGK priminde gecikme cezası ve "
-               "zammı) uygulanır; ancak bu tutar **kayıtlarınızda yok**. Tutar, ödemeyi yaptığınız güne ve resmî "
-               "orana göre vergi dairesi / SGK tarafından hesaplanır. Yukarıdaki tutarlar faiz değil, ödenmemiş "
-               "borcun kendisidir.\n\nKesin tutarı öğrenmek ve ödemeyi planlamak için muhasebecinize danışın; "
-               "isterseniz bir görüşme talebi oluşturabilirim.")
-    return {"cevap": metin, "kaynaklar": [s["id"] for s in satirlar] + ["sss.txt"], "satirlar": satirlar,
-            "yontem": "gecikme_faizi"}
+    oran_tr = f"%{GECIKME_ZAMMI_AYLIK:g}".replace(".", ",")
+    maddeler, zam_toplam, sgk_var = [], 0.0, False
+    for s in satirlar:
+        gun = (bugun - date.fromisoformat(s["son_odeme_tarihi"])).days
+        bas = (f"- **{s['tur']}** ({donem_tr(s['donem'])} dönemi): ana borç **{tl(s['tutar_tl'])}**, son ödeme "
+               f"{tarih_tr(s['son_odeme_tarihi'])} — {gun} gündür gecikmiş")
+        if s["tur"] == "SGK primi":
+            sgk_var = True
+            maddeler.append(bas + "\n  - Gecikme cezası ve zammı: SGK hesaplar (aşağıdaki nota bakın)")
+        else:
+            zam = gecikme_zammi(s["tutar_tl"], gun)
+            zam_toplam += zam
+            maddeler.append(bas + f"\n  - Tahmini gecikme zammı: **{tl(zam)}** → bugün ödenirse yaklaşık "
+                                  f"**{tl(round(s['tutar_tl'] + zam, 2))}**")
+    ana = round(sum(s["tutar_tl"] for s in satirlar), 2)
+    zam_toplam = round(zam_toplam, 2)
+    metin = f"{kapsam} {len(satirlar)} ödemeniz var:\n\n" + "\n".join(maddeler) + "\n\n"
+    if zam_toplam:
+        metin += (f"**Toplam:** ana borç {tl(ana)} + tahmini gecikme zammı {tl(zam_toplam)} = "
+                  f"**{tl(round(ana + zam_toplam, 2))}**" + (" (SGK priminin cezası/zammı hariç)" if sgk_var else "")
+                  + "\n\n")
+    elif len(satirlar) > 1:
+        metin += f"Toplam ana borç: **{tl(ana)}**\n\n"
+    metin += ("**Nasıl hesaplandı:** Gecikme zammı aylık " + oran_tr + " (6183 sayılı Kanun md. 51), son ödeme "
+              "tarihinden sonraki her gün için bu oranın 1/30'u. Rakam **tahminidir** ve bugüne kadarki tutardır; "
+              "ödeme günü ilerledikçe artar. Ana borç faiz değildir, zam onun üstüne eklenir.")
+    if sgk_var:
+        metin += ("\n\n**SGK primi:** Geciken prime gecikme cezası ve gecikme zammı birlikte uygulanır ve SGK kendi "
+                  "yöntemiyle hesaplar; bu tutar kayıtlarınızda yok, tahmin vermiyorum.")
+    metin += "\n\nKesin tutar için muhasebecinize danışın; isterseniz bir görüşme talebi oluşturabilirim."
+    return {"cevap": metin, "kaynaklar": [s["id"] for s in satirlar] + ["6183 md.51 (oran: " + oran_tr + "/ay)"],
+            "satirlar": satirlar, "yontem": "gecikme_faizi"}
 
 
 def planli_aciklama_cevabi(soru, firma_id, esik=0.6):
@@ -372,7 +399,7 @@ def cevapla_kayit(soru, firma_id, niyet):
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
         return tahmin_cevabi(firma_id, *parametreler)
-    if sorgu == "gecikme_faizi":  # gecikmiş borç + "faiz kayıtta yok" (oran uydurulmaz)
+    if sorgu == "gecikme_faizi":  # gecikmiş borç + tahmini gecikme zammı (oran config'ten)
         return gecikme_faizi_cevabi(firma_id, *parametreler)
     if sorgu == "aylik_gider":  # vergi + maaş + planlı: Python birleştirir
         return aylik_gider_cevabi(firma_id, *parametreler)

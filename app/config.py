@@ -23,6 +23,9 @@ N8N_URL = os.getenv("N8N_URL", "http://localhost:5678")
 # "Bugün" = GERÇEK tarih: son tarihi geçen ödemeler "Gecikti" sayılır, "bu ay / geçen ay" buna göre hesaplanır.
 # Sunum/test için sabit bir gün istenirse .env'e  BUGUN=2026-11-11  yazın (CLAUDE.md §6 senaryo günü).
 BUGUN = os.getenv("BUGUN") or date.today().isoformat()
+# Gecikme zammı (6183 s. Kanun md. 51): AYLIK yüzde. 13.11.2025'ten beri %3,7 (Cumhurbaşkanı Kararı).
+# Oran değişirse .env'e  GECIKME_ZAMMI_AYLIK=...  yazın. Ay kesirleri için günlük oran = aylık / 30.
+GECIKME_ZAMMI_AYLIK = float(os.getenv("GECIKME_ZAMMI_AYLIK", "3.7"))
 # Token tabanlı parçalama (atölye d5_02 ile aynı: cl100k_base, 200/40 token).
 # Türkçede ~2,1 karakter/token -> ≈420/84 karakter.
 TOKENIZER = "cl100k_base"

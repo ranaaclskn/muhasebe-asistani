@@ -381,7 +381,30 @@ def test_gecikme_faizi_ana_borcu_faiz_demez(monkeypatch):
     assert (n["sorgu"], n["parametreler"]) == ("gecikme_faizi", ["2026-11"])
     c = cevapla_kayit("x", "F001", n)["cevap"]
     assert "ana borç **54.938,65 TL**" in c and "4 gündür gecikmiş" in c
-    assert "kayıtlarınızda yok" in c and "faiz değil" in c
+    assert "faiz değil" in c  # ana borç faiz diye sunulmaz
+    # tahmini gecikme zammı: 54.938,65 × %3,7 / 30 × 4 gün = 271,03 TL (oran cevapta açıkça yazılı)
+    assert "**271,03 TL**" in c and "**55.209,68 TL**" in c and "%3,7" in c and "tahmini" in c
+
+
+# --- "geciken ödemeler nedir faizleriyle beraber toplam ödenecek tutar nedir": faiz kısmı atlanıyordu ---
+@pytest.mark.parametrize("soru", ["geciken ödemeler nedir faizleriyle beraber toplam ödenecek tutar nedir",
+                                  "son ödeme tarihi geçen ödemelerimin faiz tutarı nedir"])
+def test_faizli_toplam_sorusu_gecikme_faizine_gider(soru):
+    n = kural_duzelt(soru, {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []})
+    assert n["sorgu"] == "gecikme_faizi"
+
+
+def test_gecikme_zammi_hesabi_ve_sgk_tahmin_edilmez(monkeypatch):
+    import app.kayit as kayit
+    assert kayit.gecikme_zammi(54938.65, 4, 3.7) == 271.03
+    assert kayit.gecikme_zammi(1000, 30, 3.7) == 37.0   # tam bir ay = aylık oran
+    assert kayit.gecikme_zammi(1000, -2, 3.7) == 0      # vadesi gelmemişse zam yok
+    monkeypatch.setattr(db, "BUGUN", "2026-11-21")
+    monkeypatch.setattr(kayit, "BUGUN", "2026-11-21")
+    c = kayit.gecikme_faizi_cevabi("F003")["cevap"]  # SGK primi (21 gün) + geçici vergi (4 gün)
+    assert "SGK hesaplar" in c and "tahmin vermiyorum" in c
+    assert "**84,97 TL**" in c and "SGK priminin cezası/zammı hariç" in c
+    assert tl(21306.57 * 0.037 / 30 * 21) not in c  # SGK için zam rakamı uydurulmaz
 
 
 def test_model_cevabinda_uydurma_kavram_reddedilir():

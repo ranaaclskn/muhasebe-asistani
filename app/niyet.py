@@ -373,14 +373,12 @@ def _son_n_ay(s):
     bitis = _onceki_ay(BUGUN[:7])
     return (_ay_ekle(bitis, -(max(n, 1) - 1)), bitis)
 
-
 def _faiz_kalibi(s):
     """KENDİ gecikmiş borcunun faizi / gecikme zammı mı soruluyor? ('ödersem ne olur' gibi kurallar değil)"""
     return bool(re.search(r"faiz|gecikme zamm|gecikme ceza|\bceza", s)
                 and re.search(r"gecik|geç kal|vadesi geç|tarihi geç", s)
-                and re.search(r"ödemeler\w*m|borcum|borçlarım|ödememin|benim|var mı|ne kadar|kaç", s)
-                and not re.search(r"ödersem|verirsem|ödemezsem|ne olur|nasıl hesap|oranı", s))
-
+                and re.search(r"ödemeler\w*|bor[cç]\w*|ödememin|benim|var mı|ne kadar|kaç|toplam", s)
+                and not re.search(r"ödersem|verirsem|ödemezsem|ne olur|nasıl hesap|oranı", s)) 
 
 def _gider_kalibi(s):
     """Bir ayın TOPLAM gideri / nakit çıkışı mı soruluyor? Tür (KDV, SGK...), maaş, fatura ya da planlı
