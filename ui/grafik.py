@@ -10,7 +10,7 @@ from app.config import BUGUN
 from app.db import aylik_gelir_gider
 from app.kayit import AYLAR, tl
 
-RENK = {"Gelir": "#2a78d6", "Gider": "#e34948", "Net": "#1e1b4b"}
+RENK = {"Gelir": "#2a78d6", "Gider": "#e34948", "Net": "#1f2937"}
 PENCERELER = {"Son 3 ay": 3, "Son 6 ay": 6, "Tümü": None}
 
 
@@ -70,6 +70,16 @@ def aylik_tablo(firma_id, pencere="Son 3 ay"):
                                           if r["yon"] == "Gider") or "—",
         })
     return pd.DataFrame(kayit)
+
+
+def gider_dagilimi(firma_id, aylar):
+    """Seçilen aylarda giderin kalemlere dağılımı: [(kalem, tutar, oran), ...] büyükten küçüğe."""
+    toplam = {}
+    for r in aylik_gelir_gider(firma_id):
+        if r["yon"] == "Gider" and r["ay"] in aylar:
+            toplam[r["kalem"]] = toplam.get(r["kalem"], 0) + r["tutar"]
+    genel = sum(toplam.values()) or 1
+    return [(k, t, t / genel) for k, t in sorted(toplam.items(), key=lambda x: -x[1])]
 
 
 def grafik(df):

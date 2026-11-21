@@ -487,6 +487,18 @@ def kullanici_dogrula(eposta, sifre):
     return None
 
 
+def firma_bilgisi(firma_id):
+    """Panel başlığı ve yan menü için firma künyesi (unvan, tür, vergi no, sektör, çalışan sayısı)."""
+    _firma_kontrol(firma_id)
+    con = baglan()
+    try:
+        r = con.execute("SELECT id, unvan, tur, vergi_no, sektor, calisan_sayisi FROM firmalar WHERE id = ?",
+                        (firma_id,)).fetchone()
+        return dict(r) if r else {}
+    finally:
+        con.close()
+
+
 def yukumlulukler(firma_id):
     """Firmanın tüm yükümlülükleri (panel tablosu ve özet kartlar için)."""
     _firma_kontrol(firma_id)

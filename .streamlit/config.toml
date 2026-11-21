@@ -6,11 +6,14 @@ headless = true
 [browser]
 gatherUsageStats = false
 
-# Görünüm: açık tema, mor ana renk, yuvarlak köşeler (ui/streamlit_app.py içindeki CSS ile uyumlu)
+# Görünüm: açık tema, kurumsal lacivert ana renk (ui/streamlit_app.py içindeki CSS ile uyumlu)
 [theme]
 base = "light"
-primaryColor = "#6d28d9"
-backgroundColor = "#f7f8fc"
-secondaryBackgroundColor = "#f1f2f9"
-textColor = "#0f172a"
-baseRadius = "12px"
+primaryColor = "#12355b"
+backgroundColor = "#f4f6f9"
+secondaryBackgroundColor = "#eef1f5"
+textColor = "#1f2937"
+baseRadius = "6px"
+
+[client]
+toolbarMode = "minimal"   # "Deploy" vb. geliştirici düğmeleri gizli
