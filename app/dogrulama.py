@@ -51,8 +51,11 @@ AYLAR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz",
          "ağustos", "eylül", "ekim", "kasım", "aralık"]
 
 
-def soru_donemi(soru, varsayilan_yil="2026"):
-    """Soruda açıkça ay geçiyorsa 'YYYY-AA' döndür ('2025 Mart' -> '2025-03'), yoksa None."""
+def soru_donemi(soru, varsayilan_yil=None):
+    """Soruda açıkça ay geçiyorsa 'YYYY-AA' döndür ('2025 Mart' -> '2025-03'), yoksa None.
+    Yıl yazılmamışsa bugünün yılı (config.BUGUN)."""
+    from app.config import BUGUN
+    varsayilan_yil = varsayilan_yil or BUGUN[:4]
     s = kucuk_harf(soru)
     ay = next((i for i, a in enumerate(AYLAR, 1) if re.search(rf"\b{a}", s)), None)
     if not ay:
@@ -65,7 +68,7 @@ def soru_donemi(soru, varsayilan_yil="2026"):
 SAYI_DESENI = re.compile(r"\d{1,3}(?:\.\d{3})*,\d{2}|\d{2}\.\d{2}\.\d{4}")
 
 
-def kanit_eslestir(cevap, parcalar):
+def kanit_eslestir(cevap, parcalar, soru=None):
     """Kanıt eşleştirme: cevaptaki her tutar/tarih, getirilen parçalardan birinde BİREBİR geçmeli.
     En çok kanıtı (sayı eşleşmesi + kelime örtüşmesi) içeren parçanın dosyası kaynak sayılır.
     Döner: {"kaynak", "uydurma_sayilar", "puan"}"""
@@ -78,6 +81,17 @@ def kanit_eslestir(cevap, parcalar):
     for n in set(re.findall(r"\d+(?:[.,]\d+)?", kalan)):
         if not re.search(rf"(?<![\d.,]){re.escape(n)}(?![\d]|[.,]\d)", tum_metin):
             uydurma.append(n)
+    # Yüzde, SORUYLA ilgili bir satırda geçmeli: "gecikme zammı oranı nedir" sorusuna model beyannamedeki
+    # "SGK işçi payı kesintisi (%14)" satırını alıp "gecikme zammı oranı %14" demişti (sayı bağlamda var,
+    # anlamı yanlış). Satırda sorunun kelimelerinden (kökleriyle) en az biri yoksa yüzde uydurma sayılır.
+    if soru:
+        soru_kokleri = {kok(t) for t in tokens(soru)} - {"oranı", "oran", "yüzde"}
+        satirlar = [x for d in parcalar for x in d.page_content.splitlines()]
+        for n in set(re.findall(r"%\s*(\d+(?:[.,]\d+)?)", cevap)):
+            ilgili = [x for x in satirlar if re.search(rf"%\s*{re.escape(n)}(?!\d)", x)
+                      and soru_kokleri & {kok(t) for t in tokens(x)}]
+            if not ilgili:
+                uydurma.append(f"%{n} (soruyla ilgisiz satırdan)")
     en_iyi, en_puan = None, -1.0
     for d in parcalar:
         puan = 2 * sum(s in d.page_content for s in sayilar) + lexical_score(cevap, d.page_content)

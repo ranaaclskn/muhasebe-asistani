@@ -19,6 +19,18 @@ AYLAR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz",
          "ağustos", "eylül", "ekim", "kasım", "aralık"]
 
 
+def _ay_kaydir(ay, n):
+    toplam = int(ay[:4]) * 12 + int(ay[5:7]) - 1 + n
+    return f"{toplam // 12}-{toplam % 12 + 1:02d}"
+
+
+# Prompt ve örneklerdeki tarihler SABİT değil, bugünden hesaplanır (config.BUGUN = gerçek tarih)
+YIL, BU_AY = BUGUN[:4], BUGUN[:7]
+GECEN_AY = _ay_kaydir(BU_AY, -1)
+_AY_ADI = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim",
+           "Kasım", "Aralık"][int(BU_AY[5:]) - 1]
+
+
 def _sorgu_menusu():
     satirlar = []
     for ad, s in SORGULAR.items():
@@ -30,7 +42,7 @@ def _sorgu_menusu():
     return "\n".join(satirlar)
 
 
-SISTEM = f"""Sen bir muhasebe asistanının soru sınıflandırıcısısın. Bugünün tarihi: {BUGUN} (Kasım 2026).
+SISTEM = f"""Sen bir muhasebe asistanının soru sınıflandırıcısısın. Bugünün tarihi: {BUGUN} ({_AY_ADI} {YIL}).
 Kullanıcının sorusunu oku ve YALNIZCA şu JSON'u döndür:
 {{"niyet": "...", "sorgu": "..." veya null, "parametreler": [...]}}
 
@@ -49,13 +61,13 @@ Dikkat: "ne zaman ödedim / ödendi mi / ne kadardı" -> kayit (kullanıcının 
 
 PARAMETRE KURALLARI:
 - tur: tam olarak şunlardan biri: {", ".join(f'"{t}"' for t in TURLER)}
-- donem ve ay: "YYYY-AA" biçiminde. Yıl söylenirse o yılı kullan; söylenmezse 2026.
-  "bu ay" = "2026-11", "geçen ay" = "2026-10".
+- donem ve ay: "YYYY-AA" biçiminde. Yıl söylenirse o yılı kullan; söylenmezse {YIL}.
+  "bu ay" = "{BU_AY}", "geçen ay" = "{GECEN_AY}".
 - Soruda belirli bir dönem ve tür varsa "durum" sorgusunu kullan.
 - "bu ay ödenecek KDV" gibi ay + tür sorularında tür, ay_odemeleri/odenenler'e 2. parametre olarak eklenir.
 - "ekim ayında ödenen / geçen ay ödediğim" -> "odenenler" (ödenmiş kayıtlar).
-- yil: "YYYY" biçiminde. "bu yıl ödediğim / bu yıl yapılan ödemeler" -> "yil_odenenler" ["2026"].
-- "son 3 ayda / son 6 ayda ödenen" -> "odeme_araligi" [başlangıç ayı, bitiş ayı]; bitiş = geçen ay (2026-10).
+- yil: "YYYY" biçiminde. "bu yıl ödediğim / bu yıl yapılan ödemeler" -> "yil_odenenler" ["{YIL}"].
+- "son 3 ayda / son 6 ayda ödenen" -> "odeme_araligi" [başlangıç ayı, bitiş ayı]; bitiş = geçen ay ({GECEN_AY}).
 - "kaç çalışan / sektörüm / vergi numaram" -> "firma_bilgisi" [].
 - Kullanıcının KENDİ eklediği kayıtlar: "planladığım / eklediğim ödemeler, kira" -> "planli_odemeler";
   "tahsilat / alacak / müşteriden gelecek para" -> "beklenen_tahsilatlar"; "nakit planı / para giriş çıkış"
@@ -64,23 +76,23 @@ PARAMETRE KURALLARI:
 
 # Few-shot örnekleri (test setindeki soruların birebir aynısı DEĞİL)
 ORNEKLER = [
-    ("Eylül SGK primim ödendi mi?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["SGK primi", "2026-09"]}),
-    ("Haziran muhtasarı ne kadardı?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["Muhtasar", "2026-06"]}),
+    ("Eylül SGK primim ödendi mi?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["SGK primi", f"{YIL}-09"]}),
+    ("Haziran muhtasarı ne kadardı?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["Muhtasar", f"{YIL}-06"]}),
     ("2024 Nisan SGK primim ne kadardı?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["SGK primi", "2024-04"]}),
-    ("Temmuz KDV'mi hangi gün ödedim?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["KDV", "2026-07"]}),
-    ("Aralıkta hangi ödemelerim var, toplam ne kadar?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-12"]}),
-    ("Bu ay neleri ödemem gerekiyor?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]}),
-    ("Geçen ay neler ödedim?", {"niyet": "kayit", "sorgu": "odenenler", "parametreler": ["2026-10"]}),
-    ("Bu yıl toplam ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]}),
+    ("Temmuz KDV'mi hangi gün ödedim?", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["KDV", f"{YIL}-07"]}),
+    ("Aralıkta hangi ödemelerim var, toplam ne kadar?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": [f"{YIL}-12"]}),
+    ("Bu ay neleri ödemem gerekiyor?", {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": [BU_AY]}),
+    ("Geçen ay neler ödedim?", {"niyet": "kayit", "sorgu": "odenenler", "parametreler": [GECEN_AY]}),
+    ("Bu yıl toplam ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": [YIL]}),
     ("2026 yılında ödediğim KDV toplamı nedir?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026", "KDV"]}),
-    ("Son 6 ayda ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "odeme_araligi", "parametreler": ["2026-05", "2026-10"]}),
+    ("Son 6 ayda ne kadar ödeme yaptım?", {"niyet": "kayit", "sorgu": "odeme_araligi", "parametreler": [_ay_kaydir(GECEN_AY, -5), GECEN_AY]}),
     ("Firmamızda kaç çalışan kayıtlı?", {"niyet": "kayit", "sorgu": "firma_bilgisi", "parametreler": []}),
-    ("Aralıkta planladığım ödemeler neler?", {"niyet": "kayit", "sorgu": "planli_odemeler", "parametreler": ["2026-12"]}),
+    ("Aralıkta planladığım ödemeler neler?", {"niyet": "kayit", "sorgu": "planli_odemeler", "parametreler": [f"{YIL}-12"]}),
     ("Müşterilerden ne kadar tahsilat bekliyorum?", {"niyet": "kayit", "sorgu": "beklenen_tahsilatlar", "parametreler": []}),
     ("Ödemesi geciken bir borcum var mı?", {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []}),
     ("Sıradaki ödemem ne zaman?", {"niyet": "kayit", "sorgu": "en_yakin", "parametreler": []}),
     ("KDV'leri en son ne zaman ödedim?", {"niyet": "kayit", "sorgu": "odeme_gecmisi", "parametreler": ["KDV"]}),
-    ("Ekim ayı faturalarımı göster.", {"niyet": "kayit", "sorgu": "faturalar", "parametreler": ["2026-10"]}),
+    ("Ekim ayı faturalarımı göster.", {"niyet": "kayit", "sorgu": "faturalar", "parametreler": [f"{YIL}-10"]}),
     ("Eylül KDV beyannamemde ne yazıyordu?", {"niyet": "belge", "sorgu": None, "parametreler": []}),
     ("Muhtasar beyannamesi ne demek?", {"niyet": "belge", "sorgu": None, "parametreler": []}),
     ("KDV'yi geç ödersem ceza var mı?", {"niyet": "belge", "sorgu": None, "parametreler": []}),
@@ -122,7 +134,7 @@ def _donem_normalize(deger):
     for i, ay in enumerate(AYLAR, 1):
         if ay in d:
             yil = re.search(r"\d{4}", d)
-            return f"{yil.group() if yil else '2026'}-{i:02d}"
+            return f"{yil.group() if yil else BUGUN[:4]}-{i:02d}"
     return None
 
 
@@ -183,6 +195,11 @@ def kural_duzelt(soru, sonuc):
     if re.search(r"ücret|maaş|bordro", s) and sonuc["niyet"] != "belge":
         return {"niyet": "belge", "sorgu": None, "parametreler": [],
                 "duzeltme": f"ücret/maaş -> belge (model: {sonuc['niyet']})"}
+    # "SGK primini geç ödersem ne olur?" varsayım/kural sorusudur, kişisel kayıt değil -> belge (SSS)
+    if sonuc["niyet"] == "kayit" and re.search(r"ödersem|verirsem|ödemezsem|vermezsem|\bne olur\b|"
+                                               r"(?:faiz|zam\w*|ceza\w*) oran|nasıl hesaplan", s):
+        return {"niyet": "belge", "sorgu": None, "parametreler": [],
+                "duzeltme": "varsayım sorusu -> belge (model: kayit)"}
     # "önümüzdeki ay SGK primini tahmin et" -> TAHMİN: model bunu belgeye (RAG) gönderiyordu ve RAG
     # haziran beyannamesinden alakasız bir cevap uyduruyordu. Tahmini KOD hesaplar (kayit.tahmin_cevabi).
     if _tahmin_kalibi(s):
@@ -191,6 +208,18 @@ def kural_duzelt(soru, sonuc):
         return {"niyet": "kayit", "sorgu": "tahmin",
                 "parametreler": [ay] + ([turler.pop()] if len(turler) == 1 else []),
                 "duzeltme": f"tahmin kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
+    # "Gecikmiş ödemelerimin faizi ne kadar?" -> kişisel gecikme faizi sorusu. Model ana borcu "faiz" diye
+    # sunuyordu; cevabı KOD verir (gecikmiş borçlar + faiz tutarının kayıtta olmadığı). Genel kural soruları
+    # ("geç ödersem ne olur") yukarıda belgeye gitti.
+    if _faiz_kalibi(s):
+        ay = _soru_ayi(s)
+        return {"niyet": "kayit", "sorgu": "gecikme_faizi", "parametreler": [ay] if ay else [],
+                "duzeltme": f"gecikme faizi kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
+    # "Ocakta toplam giderlerim / ne kadar ödeyeceğim" -> AYLIK GİDER (vergi + maaş + planlı); model bunu
+    # yıllık vergi özetine ya da boş aya gönderiyordu. Ay söylenmezse bu ay.
+    if _gider_kalibi(s):
+        return {"niyet": "kayit", "sorgu": "aylik_gider", "parametreler": [_soru_ayi(s) or BUGUN[:7]],
+                "duzeltme": f"gider kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
     # Kesin kayıt kalıbı varsa model ne derse desin kayıt sorusudur (T04: model "belge" diyordu)
     kesin = _kesin_kayit(s)
     if kesin and sonuc["niyet"] != "kayit":
@@ -221,6 +250,9 @@ def kural_duzelt(soru, sonuc):
         sorgu, yeni = planli, []
     elif _gec_odeme_kalibi(s):
         sorgu, yeni = "gec_odenenler", []
+    # "son ödeme tarihi geçmiş / vadesi geçen ödemeler" -> ŞU AN gecikmiş (ödenmemiş) kayıtlar
+    elif _gecikmis_kalibi(s) and sorgu != "gecikmis":
+        sorgu, yeni = "gecikmis", []
     elif _fatura_kalibi(s) and sorgu != "faturalar":  # ay aşağıda sorudan doldurulur
         sorgu, yeni = "faturalar", [bu_ay]
     # "kaç kişi çalışıyor / sektörüm ne" -> firma bilgisi (yalnızca oturumdaki firma)
@@ -237,6 +269,9 @@ def kural_duzelt(soru, sonuc):
     # (model LIMIT 1'li en_yakin seçiyordu, 3 istenince 1 kayıt geliyordu)
     elif _yaklasan_adet(s):
         sorgu, yeni = "yaklasanlar", [_yaklasan_adet(s)]
+    # "gelecek / yaklaşan ödemelerim ne kadar" (sayı ve ay yok) -> kayıtlı tüm yaklaşan ödemeler
+    elif _yaklasan_kalibi(s):
+        sorgu, yeni = "yaklasanlar", []
     # "kasım ayında toplam ödeme ne kadar" -> o ayın ödemeleri (model yil_odenenler seçiyordu)
     elif _ay_toplam_sorgusu(s) and sorgu != _ay_toplam_sorgusu(s):
         sorgu, yeni = _ay_toplam_sorgusu(s), [_soru_ayi(s)]
@@ -292,7 +327,7 @@ def _kesin_kayit(s):
         return _planli_kalibi(s)
     if _gec_odeme_kalibi(s):  # geçmişte geç ÖDENMİŞ ("gecikmiş ödediğim", "...vardı")
         return "gec_odenenler"
-    if re.search(r"gecik", s) and re.search(r"var mı|ödeme|borç", s):  # ŞU AN ödenmemiş
+    if _gecikmis_kalibi(s):  # ŞU AN ödenmemiş ve son tarihi geçmiş
         return "gecikmis"
     if _fatura_kalibi(s):
         return "faturalar"
@@ -302,7 +337,7 @@ def _kesin_kayit(s):
         return "odeme_araligi"
     if _yil_odeme_kalibi(s):
         return "yil_odenenler"
-    if _yaklasan_adet(s):
+    if _yaklasan_adet(s) or _yaklasan_kalibi(s):
         return "yaklasanlar"
     if _ay_toplam_sorgusu(s):
         return _ay_toplam_sorgusu(s)
@@ -337,6 +372,30 @@ def _son_n_ay(s):
     n = int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]
     bitis = _onceki_ay(BUGUN[:7])
     return (_ay_ekle(bitis, -(max(n, 1) - 1)), bitis)
+
+
+def _faiz_kalibi(s):
+    """KENDİ gecikmiş borcunun faizi / gecikme zammı mı soruluyor? ('ödersem ne olur' gibi kurallar değil)"""
+    return bool(re.search(r"faiz|gecikme zamm|gecikme ceza|\bceza", s)
+                and re.search(r"gecik|geç kal|vadesi geç|tarihi geç", s)
+                and re.search(r"ödemeler\w*m|borcum|borçlarım|ödememin|benim|var mı|ne kadar|kaç", s)
+                and not re.search(r"ödersem|verirsem|ödemezsem|ne olur|nasıl hesap|oranı", s))
+
+
+def _gider_kalibi(s):
+    """Bir ayın TOPLAM gideri / nakit çıkışı mı soruluyor? Tür (KDV, SGK...), maaş, fatura ya da planlı
+    ödeme adı geçiyorsa o özel yol kullanılır, buraya girmez."""
+    genel = re.search(r"gider|harcama|masraf|nakit çıkış|para çıkış|ne kadar para (?:çıkacak|gidecek)|"
+                      r"(?:toplam )?ne kadar (?:ödeme yapaca|ödeyece)|toplam ödeyece", s)
+    ozel = re.search(r"personel|maaş|ücret|bordro|işçilik|plan|fatura|kdv|muhtasar|sgk|prim|geçici|beyan|"
+                     r"vergi", s)
+    return bool(genel and not ozel)
+
+
+def _yaklasan_kalibi(s):
+    """'gelecek ödemelerim ne kadar', 'yaklaşan ödemeler' (sayı yok, ay yok)."""
+    return bool(re.search(r"(?:gelecek|yaklaşan|ön\w*müz\w*|sıradaki|ileriki) [öo]demeler", s)
+                and not _soru_ayi(s) and not _yaklasan_adet(s))
 
 
 def _tahmin_kalibi(s):
@@ -379,6 +438,17 @@ def _firma_kalibi(s):
                 or re.search(r"çalışan sayı|personel sayı|vergi no|vergi numara|sektör|firma türü|şirket türü", s))
 
 
+def _gecikmis_kalibi(s):
+    """ŞU AN gecikmiş ödemeler mi soruluyor? 'gecikmiş ödemem var mı', 'son ödeme tarihi geçmiş ödemeleri
+    getir', 'vadesi geçen borçlar'. Genel kural soruları ('gecikme cezası ne olur') belgede kalır.
+    (Arayüzde 'son ödeme tarihi geçmiş ödemeleri getir' RAG'a gidip SSS'den yanlış cevap almıştı.)"""
+    if re.search(r"ceza|zammı|ne olur|ödersem|verirsem", s):
+        return False
+    gecikme = re.search(r"gecik|(?:son (?:ödeme )?(?:tarihi|günü)|ödeme tarihi|vadesi|süresi|zamanı)\s+"
+                        r"(?:\w+\s+)?geç(?:miş|en|ti)|vadesi dol|süresi dol", s)
+    return bool(gecikme and re.search(r"var mı|ödeme|borç|getir|göster|neler|hangi|listele|kayıt|yükümlülü", s))
+
+
 def _gec_odeme_kalibi(s):
     """'gecikmiş ödediğim', 'geç ödenen', 'gecikmiş ödemem vardı' -> GEÇMİŞ. ('geç ödersem' değil.)"""
     return bool(re.search(r"gecik|\bgeç\b", s) and re.search(r"ödedi|ödenmiş|ödenen|vardı|yapmışım", s))
@@ -414,8 +484,28 @@ def _soru_ayi(s):
     ay_no = next((i for i, a in enumerate(AYLAR, 1) if re.search(rf"\b{a}", s)), None)
     if ay_no:
         yil = re.search(r"\b(20\d{2})\b", s)
-        return f"{yil.group(1) if yil else BUGUN[:4]}-{ay_no:02d}"
+        if yil:
+            return f"{yil.group(1)}-{ay_no:02d}"
+        return f"{_ay_yili(s, ay_no)}-{ay_no:02d}"
     return None
+
+
+GELECEK_ZAMAN = r"ödenecek|ödeyece|olacak|yapılacak|gelecek|önümüzdeki|tahmin|beklen|planl|çıkacak|gidecek|seneye"
+
+
+def _ay_yili(s, ay_no):
+    """Yılı yazılmamış ay adının yılı. Bugün Kasım 2026 iken:
+    'gelecek ocak' / 'ocakta ödenecek' -> 2027 (geçmiş bir ay, ama soru GELECEĞİ soruyor);
+    'ocakta ödediğim' / 'ocak KDV'si' -> 2026; 'geçen aralık' -> 2025."""
+    yil, bu_ay_no = int(BUGUN[:4]), int(BUGUN[5:7])
+    ad = AYLAR[ay_no - 1]
+    if re.search(rf"(?:gelecek|önümüzdeki|ön\w*müz\w*|seneye|haftaya|sonraki)\s+(?:yıl\w*\s+)?{ad}", s) or "seneye" in s:
+        return yil + 1 if ay_no <= bu_ay_no else yil
+    if re.search(rf"geçen\s+(?:yıl\w*\s+)?{ad}", s):
+        return yil - 1 if ay_no >= bu_ay_no else yil
+    if ay_no < bu_ay_no and re.search(GELECEK_ZAMAN, s) and not re.search(r"ödedi|ödendi|ödenmiş|ödenen\b|yapılan", s):
+        return yil + 1
+    return yil
 
 
 def _yil_odeme_kalibi(s):

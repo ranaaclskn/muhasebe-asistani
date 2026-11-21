@@ -16,10 +16,13 @@ from app.config import BELGE_DIR, CHROMA_DIR, EMBED_MODEL, KOLEKSIYON, LLM_MODEL
 import json
 import re
 
-from app.dogrulama import kanit_eslestir, lexical_score, rerank, soru_donemi, validate_citations
+from app.dogrulama import (kanit_eslestir, kok, kucuk_harf, lexical_score, rerank, soru_donemi, tokens,
+                           validate_citations)
 
 CEKIMSER = "Bu bilgi kayıtlarınızda yok, muhasebecinize iletebilirim."
 EMIN_DEGIL = "Bu soruya belgelerden emin bir cevap çıkaramadım; muhasebecinize iletebilirim."
+ORAN_YOK = ("Sorduğunuz oran belgelerinizde yer almıyor. Güncel oran için resmî duyurulara (GİB / SGK) "
+            "bakabilir ya da sorunuzu muhasebecinize iletebilirim.")
 
 
 # ---------- Arama ----------
@@ -175,6 +178,31 @@ def beyanname_satiri(soru, firma_id):
     return f"{'; '.join(satirlar)}. [kaynak: {kaynak}]"
 
 
+# ---------- SSS: soru-cevap belgesi; benzer soruya belgedeki CEVAP aynen ----------
+# "SGK primini geç ödersem ne olur?" belgede birebir var, ama model cevabı "SGK primi ÖDEMEYEBİLİRSİNİZ"
+# diye bozmuştu (kullanıcıyı yanlış yönlendiren cümle). Soru SSS'deki bir soruyla örtüşüyorsa cevap aynen.
+SSS = "sss.txt"
+SSS_ESIGI = 0.6
+
+
+def sss_cevabi(soru):
+    metin = (BELGE_DIR / SSS).read_text(encoding="utf-8")
+    ciftler = re.findall(r"Soru:\s*(.+?)\nCevap:\s*(.+?)(?=\n\s*\n|\Z)", metin, re.S)
+    if not ciftler:
+        return None
+    # iki yönlü örtüşme: kullanıcının kelimeleri SSS sorusunda VE SSS sorusunun kelimeleri kullanıcıda
+    puan = lambda c: (lexical_score(soru, c[0]) + lexical_score(c[0], soru)) / 2  # noqa: E731
+    en_iyi = max(ciftler, key=puan)
+    if puan(en_iyi) < SSS_ESIGI:
+        return None
+    return f"{' '.join(en_iyi[1].split())} [kaynak: {SSS}]"
+
+
+# Kullanıcıyı yanlış yönlendiren ifadeler: SISTEM'de yasak ama küçük model yine de yazabiliyor -> cevap atılır
+YANILTICI = re.compile(r"ödemeyebilir|ödemenize gerek|ödemek zorunda değil|vermenize gerek|"
+                       r"gerek yok|ödemeyin|vermeyebilir|ceza(sı)? (yok|uygulanmaz)", re.I)
+
+
 def cevapla_belge(soru, firma_id):
     """retrieve -> rerank -> generate (JSON) -> kanıt eşleştirme -> atıf doğrulama.
     Döner: {"cevap" ('... [kaynak: x.txt]'), "kaynaklar" (getirilen), "atif", "kanit", "parcalar"}"""
@@ -182,6 +210,10 @@ def cevapla_belge(soru, firma_id):
     if takvim:  # genel son tarih kuralı: ORTAK takvimden aynen (firma filtresi gerekmez, herkes görür)
         return {"cevap": takvim, "kaynaklar": [TAKVIM], "atif": validate_citations(takvim, [TAKVIM]),
                 "kanit": {"kaynak": TAKVIM}, "parcalar": []}
+    sss = sss_cevabi(soru)
+    if sss:  # SSS'de karşılığı olan soru: belgedeki cevap aynen
+        return {"cevap": sss, "kaynaklar": [SSS], "atif": validate_citations(sss, [SSS]),
+                "kanit": {"kaynak": SSS}, "parcalar": []}
     satir = beyanname_satiri(soru, firma_id)
     if satir:  # belirli ay + tür tutarı: firmanın kendi beyannamesinden aynen
         dosya = satir.rsplit("[kaynak: ", 1)[1].rstrip("]")
@@ -205,6 +237,16 @@ def cevapla_belge(soru, firma_id):
     if max(lexical_score(soru, d.page_content) for d, _b, _l in parcalar) < ILGI_ESIGI:
         return sonuc
 
+    # ORAN sorusu ("gecikme zammı oranı nedir") ama getirilen hiçbir satırda hem yüzde hem sorunun konusu
+    # yok -> belgelerde oran YOK; model çağrılırsa ya alakasız bir yüzdeyi (%14 SGK işçi payı) ya da anlamsız
+    # bir cümle veriyordu. Dürüst cevap: belgede yok.
+    if re.search(r"oran|yüzde", kucuk_harf(soru)):
+        konu = {kok(t) for t in tokens(soru)} - {"oranı", "oran", "yüzde"}
+        if not any("%" in x and konu & {kok(t) for t in tokens(x)}
+                   for d, _b, _l in parcalar for x in d.page_content.splitlines()):
+            sonuc["cevap"] = ORAN_YOK
+            return sonuc
+
     mesajlar = [("system", SISTEM), ("human", f"BAĞLAM:\n{baglam_kur(parcalar)}\n\nSORU: {soru}")]
     try:
         j = json.loads(llm().invoke(mesajlar).content)
@@ -214,10 +256,13 @@ def cevapla_belge(soru, firma_id):
         return sonuc
     if not metin or CEKIMSER.split(",")[0] in metin:  # model çekimser kaldı
         return sonuc
+    if YANILTICI.search(metin):  # "ödemeyebilirsiniz" gibi yanlış yönlendirme: asla gösterme
+        sonuc["cevap"] = EMIN_DEGIL
+        return sonuc
 
     # Kanıt eşleştirme: cevaptaki tutar/tarihler parçalarda birebir var mı, hangi dosyadan?
     docs = [d for d, _b, _l in parcalar]
-    kanit = kanit_eslestir(metin, docs)
+    kanit = kanit_eslestir(metin, docs, soru)
     kanit["model_kaynagi"] = j.get("kaynak")
     sonuc["kanit"] = kanit
     if kanit["uydurma_sayilar"] or lexical_score(metin, " ".join(d.page_content for d in docs)) < 0.3:

@@ -212,6 +212,15 @@ SORGULAR = {
     },
 }
 
+# ETKİN DURUM: veritabanındaki durum sabittir ('Bekliyor'), ama son ödeme tarihi BUGÜNDEN önceyse ve
+# ödenmemişse kayıt fiilen GECİKMİŞTİR. Her yükümlülük sorgusu durumu bugüne göre hesaplar; böylece
+# 17.11'de son günü geçen geçici vergi 21.11'de "ödenecekler / yaklaşanlar" arasında "Bekliyor" görünmez.
+DURUM_SQL = ("CASE WHEN durum != 'Ödendi' AND son_odeme_tarihi < :bugun THEN 'Gecikti' "
+             "ELSE durum END AS durum")
+for _s in SORGULAR.values():
+    if "FROM yukumlulukler" in _s["sql"]:
+        _s["sql"] = _s["sql"].replace("son_odeme_tarihi, durum", "son_odeme_tarihi, " + DURUM_SQL)
+
 # DB'deki tür adları birebir bu dört değer (CLAUDE.md §8). Model/ kullanıcı farklı yazarsa eşle.
 TURLER = ["KDV", "Muhtasar", "SGK primi", "Geçici vergi"]
 _TUR_ESLEME = {
@@ -484,8 +493,9 @@ def yukumlulukler(firma_id):
     con = baglan()
     try:
         return [dict(r) for r in con.execute(
-            "SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum, odeme_tarihi "
-            "FROM yukumlulukler WHERE firma_id = ? ORDER BY son_odeme_tarihi DESC", (firma_id,))]
+            f"SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, {DURUM_SQL}, odeme_tarihi "
+            "FROM yukumlulukler WHERE firma_id = :firma_id ORDER BY son_odeme_tarihi DESC",
+            {"firma_id": firma_id, "bugun": BUGUN})]
     finally:
         con.close()
 
@@ -534,7 +544,10 @@ def talep_karar(talep_id, karar, karar_veren_id):
 
 
 def _kontrol():
-    """CLAUDE.md Adım 5 Kontrol."""
+    """CLAUDE.md Adım 5 Kontrol. Beklenen değerler senaryo gününe (11.11.2026) göredir."""
+    if BUGUN != "2026-11-11":
+        print(f"Not: bugün = {BUGUN}. Bu kontrol senaryo gününe göre yazıldı; gecikmiş / en yakın ödeme "
+              "satırları farklı çıkabilir. Senaryo gününde çalıştırmak için:  BUGUN=2026-11-11 python -m app.db\n")
     tamam = True
 
     def yaz(ok, mesaj):

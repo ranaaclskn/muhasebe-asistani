@@ -68,7 +68,7 @@ def alanlari_cikar(s):
     ay = next((i for i, a in enumerate(AYLAR, 1) if re.search(rf"\b{a}", s)), None)
     if ay:
         yil = re.search(r"\b(20\d{2})\b", s)
-        alanlar["donem"] = f"{yil.group(1) if yil else '2026'}-{ay:02d}"
+        alanlar["donem"] = f"{yil.group(1) if yil else BUGUN[:4]}-{ay:02d}"
     elif re.search(r"\bson\b|en son", s):
         alanlar["donem"] = "son"  # akış, firmanın en son beyannamesini veritabanından bulur
     return alanlar

@@ -10,7 +10,7 @@ import re
 
 from langchain_ollama import ChatOllama
 
-from app.config import LLM_MODEL, OLLAMA_URL
+from app.config import BUGUN, LLM_MODEL, OLLAMA_URL
 from app.db import calistir, planli_islemler
 from app.dogrulama import lexical_score
 
@@ -125,8 +125,10 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
     # Birden fazla kayıt: okunaklı olsun diye ALT ALTA liste (Markdown; Streamlit madde olarak çizer)
     n = len(satirlar)
+    gecikmis = sum(s.get("durum") == "Gecikti" for s in satirlar)  # son tarihi BUGÜNDEN önce, ödenmemiş
     baslik = {"gecikmis": "Gecikmiş ödemeniz var:",
-              "ay_odemeleri": f"{n} ödeme bekliyor:",
+              "ay_odemeleri": f"{n} ödeme bekliyor" + (f" ({gecikmis} tanesinin son ödeme tarihi geçti, "
+                                                       f"gecikmiş)" if gecikmis else "") + ":",
               "odenenler": f"{n} ödeme yapılmış:",
               "yil_odenenler": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_araligi": f"{n} ödeme yapılmış (türe göre özet):",
@@ -197,7 +199,9 @@ def cevap_dogrula(cevap, veri, satirlar, toplam=None):
     """Model cevabını VERİ'ye karşı denetle:
     1) Cevaptaki her tutar/tarih VERİ'de birebir geçmeli (uydurma sayı yok).
     2) Ana rakam cevapta olmalı: toplam varsa toplam, tek kayıtsa o kaydın tutarı.
-    3) Hiçbir kayıt ödenmemişken cevap 'ödendi' dememeli (durum çelişkisi)."""
+    3) Hiçbir kayıt ödenmemişken cevap 'ödendi' dememeli (durum çelişkisi).
+    4) VERİ'de olmayan bir KAVRAM uydurulmamalı: "gecikmiş ödemelerimin faizi" sorusunda model ana borcu
+       (54.938,65 TL) "faiz" diye sunmuştu; rakam doğru, etiket uydurma."""
     sayilar = SAYI_DESENI.findall(cevap)
     uydurma = [s for s in sayilar if s not in veri]
     ana = toplam if toplam is not None else (satirlar[0]["tutar_tl"] if len(satirlar) == 1 else None)
@@ -207,8 +211,41 @@ def cevap_dogrula(cevap, veri, satirlar, toplam=None):
     odenmemis = all(s.get("durum", "Ödendi") != "Ödendi" for s in satirlar)
     celiski = (odenmemis and re.search(r"ödendi|ödediniz|ödenmiş", kucuk)
                and not re.search(r"ödenmedi|ödenmemiş|bekliyor|gecik", kucuk))
-    return {"gecerli": bool(sayilar) and not uydurma and not celiski,
-            "uydurma": uydurma + (["durum çelişkisi"] if celiski else [])}
+    veri_kucuk = veri.lower()
+    kavram = [k for k in KAVRAMLAR if re.search(k, kucuk) and not re.search(k, veri_kucuk)]
+    return {"gecerli": bool(sayilar) and not uydurma and not celiski and not kavram,
+            "uydurma": uydurma + (["durum çelişkisi"] if celiski else []) + [f"uydurma kavram: {k}" for k in kavram]}
+
+
+# Kayıt cevabında yalnızca VERİ'de geçiyorsa kullanılabilecek kavramlar
+KAVRAMLAR = [r"faiz", r"ceza", r"gecikme zamm", r"\bzam\b", r"indirim", r"iade", r"taksit", r"kredi"]
+
+
+def gecikme_faizi_cevabi(firma_id, ay=None):
+    """'Gecikmiş ödemelerimin faizi ne kadar?' -> gecikmiş borçlar + kaç gündür gecikmiş + DÜRÜST not:
+    faiz / gecikme zammı tutarı kayıtlarda YOK (oran ve ödeme gününe göre vergi dairesi/SGK hesaplar).
+    Ana borç asla 'faiz' diye sunulmaz; oran uydurulmaz."""
+    from datetime import date
+    bugun = date.fromisoformat(BUGUN)
+    satirlar = [s for s in calistir("gecikmis", firma_id) if not ay or s["son_odeme_tarihi"][:7] == ay]
+    kapsam = f"{donem_tr(ay)} içinde son tarihi geçmiş" if ay else "Son ödeme tarihi geçmiş"
+    if not satirlar:
+        return {"cevap": f"{kapsam} ödenmemiş borcunuz yok; bu yüzden gecikme faizi / zammı da doğmaz.",
+                "kaynaklar": [], "satirlar": [], "yontem": "gecikme_faizi"}
+    liste = "\n".join(
+        f"- {s['tur']} ({donem_tr(s['donem'])} dönemi): ana borç **{tl(s['tutar_tl'])}**, son ödeme "
+        f"{tarih_tr(s['son_odeme_tarihi'])} — **{(bugun - date.fromisoformat(s['son_odeme_tarihi'])).days} gündür "
+        f"gecikmiş**" for s in satirlar)
+    toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
+    metin = (f"{kapsam} {len(satirlar)} ödemeniz var:\n\n{liste}\n\n"
+             + (f"Toplam ana borç: **{tl(toplam)}**\n\n" if len(satirlar) > 1 else "")
+             + "**Faiz / gecikme zammı:** Evet, geciken ödemelere gecikme zammı (SGK priminde gecikme cezası ve "
+               "zammı) uygulanır; ancak bu tutar **kayıtlarınızda yok**. Tutar, ödemeyi yaptığınız güne ve resmî "
+               "orana göre vergi dairesi / SGK tarafından hesaplanır. Yukarıdaki tutarlar faiz değil, ödenmemiş "
+               "borcun kendisidir.\n\nKesin tutarı öğrenmek ve ödemeyi planlamak için muhasebecinize danışın; "
+               "isterseniz bir görüşme talebi oluşturabilirim.")
+    return {"cevap": metin, "kaynaklar": [s["id"] for s in satirlar] + ["sss.txt"], "satirlar": satirlar,
+            "yontem": "gecikme_faizi"}
 
 
 def planli_aciklama_cevabi(soru, firma_id, esik=0.6):
@@ -263,17 +300,93 @@ def tahmin_cevabi(firma_id, ay, tur=None):
     return {"cevap": metin, "kaynaklar": kaynaklar, "satirlar": [], "yontem": "tahmin"}
 
 
+def aylik_gider_cevabi(firma_id, ay):
+    """'Ocakta toplam giderlerim ne kadar olacak?' -> o ayın NAKİT ÇIKIŞI, üç kalem:
+      1) vergi ve prim: o ay ödenen + o ay son tarihli ödenmemiş kayıtlar; gelecekte kaydı olmayan
+         aylık türler (KDV, Muhtasar, SGK) için son 3 dönem ortalaması (tahmin),
+      2) maaşlar: çalışanlara ödenen NET (bordro varsa gerçek, gelecek ay için tahmin),
+      3) kullanıcının kendi eklediği planlı ödemeler.
+    Çift sayım yok: net maaş çalışana, kesilen gelir vergisi muhtasarla, SGK primiyle devlete gider."""
+    from app.bordro import maas_tahmini  # döngüsel import olmasın diye burada
+    gelecek = ay >= BUGUN[:7]
+    toplam, kaynaklar, tahmin_var = 0.0, [], False
+
+    vergi_satir, turler = [], set()
+    kayitli = {s["id"]: s for s in calistir("odenenler", firma_id, ay) + calistir("ay_odemeleri", firma_id, ay)}
+    for s in sorted(kayitli.values(), key=lambda x: x["son_odeme_tarihi"]):
+        vergi_satir.append(f"- {s['tur']} ({donem_tr(s['donem'])} dönemi): {tl(s['tutar_tl'])} — {s['durum']}"
+                           + (f", son ödeme {tarih_tr(s['son_odeme_tarihi'])}" if s["durum"] != "Ödendi" else ""))
+        turler.add(s["tur"])
+        toplam += s["tutar_tl"]
+        kaynaklar.append(s["id"])
+    if gelecek:
+        for t in AYLIK_TURLER:
+            if t in turler:
+                continue
+            gecmis = calistir("donem_gecmisi", firma_id, t)
+            if gecmis:
+                deger = round(sum(g["tutar_tl"] for g in gecmis) / len(gecmis), 2)
+                vergi_satir.append(f"- {t}: yaklaşık {tl(deger)} (tahmin: son {len(gecmis)} dönemin ortalaması)")
+                toplam += deger
+                tahmin_var = True
+    if not vergi_satir:
+        vergi_satir.append("- Bu ay için vergi/prim kaydı yok.")
+
+    bordro = next((b for b in calistir("bordro_aylik_toplam", firma_id) if b["donem"] == ay), None)
+    if bordro:
+        maas_satir = (f"- {bordro['kisi']} çalışana net {tl(bordro['net_tl'])} "
+                      f"(ödeme {tarih_tr(bordro['odeme_tarihi'])})")
+        toplam += bordro["net_tl"]
+        kaynaklar.append(f"bordro:{ay}")
+    elif gelecek and (mt := maas_tahmini(firma_id)):
+        maas_satir = (f"- {mt['kisi']} çalışana net yaklaşık {tl(mt['net'])} (tahmin: son {len(mt['aylar'])} "
+                      f"ayın ortalaması; ay sonunda ödenir)")
+        toplam += mt["net"]
+        tahmin_var = True
+        kaynaklar += [f"bordro:{d}" for d in mt["aylar"]]
+    else:
+        maas_satir = "- Bu ay için bordro kaydı yok."
+
+    planli = calistir("planli_odemeler", firma_id, ay)
+    plan_satir = [f"- {tarih_tr(p['tarih'])} {p['aciklama']}"
+                  + (f" ({p['karsi_taraf']})" if p.get("karsi_taraf") else "") + f": {tl(p['tutar_tl'])}"
+                  for p in planli] or ["- Bu ay için eklediğiniz planlı ödeme yok."]
+    toplam += sum(p["tutar_tl"] for p in planli)
+    kaynaklar += [f"plan#{p['id']}" for p in planli]
+
+    yaklasik = "yaklaşık " if tahmin_var else ""
+    metin = (f"{donem_tr(ay)} toplam giderleri{' (tahmini)' if tahmin_var else ''}:\n\n"
+             f"**Vergi ve prim ödemeleri**\n" + "\n".join(vergi_satir) +
+             f"\n\n**Maaşlar (çalışanlara net)**\n{maas_satir}\n\n"
+             f"**Planlı ödemeleriniz (sizin eklediğiniz)**\n" + "\n".join(plan_satir) +
+             f"\n\n**Toplam: {yaklasik}{tl(round(toplam, 2))}**")
+    if tahmin_var:
+        metin += ("\n\n_Tahmin olan kalemler geçmiş ortalamalardır; kesin tutarlar beyanname ve bordro "
+                  "oluşunca belli olur._")
+    return {"cevap": metin, "kaynaklar": kaynaklar, "satirlar": [], "yontem": "aylik_gider"}
+
+
 def cevapla_kayit(soru, firma_id, niyet):
     """niyet: niyet_belirle() çıktısı ({'sorgu', 'parametreler'}).
     Döner: {"cevap", "kaynaklar" (kayıt id'leri), "satirlar", "yontem": model|sablon|cekimser}"""
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
         return tahmin_cevabi(firma_id, *parametreler)
+    if sorgu == "gecikme_faizi":  # gecikmiş borç + "faiz kayıtta yok" (oran uydurulmaz)
+        return gecikme_faizi_cevabi(firma_id, *parametreler)
+    if sorgu == "aylik_gider":  # vergi + maaş + planlı: Python birleştirir
+        return aylik_gider_cevabi(firma_id, *parametreler)
     if sorgu == "bordro":  # çalışan/maaş: app/bordro.py (döngüsel import olmasın diye burada)
         from app.bordro import bordro_cevabi
         return bordro_cevabi(soru, firma_id) or {"cevap": CEKIMSER, "kaynaklar": [], "satirlar": [],
                                                   "yontem": "cekimser"}
     satirlar = calistir(sorgu, firma_id, *parametreler)
+    # Gelecek bir ayın ödemeleri sorulmuş ama henüz kayıt yok -> "bilgi yok" yerine TAHMİN
+    if not satirlar and sorgu == "ay_odemeleri" and parametreler and parametreler[0] > BUGUN[:7]:
+        r = tahmin_cevabi(firma_id, *parametreler)
+        r["cevap"] = (f"{donem_tr(parametreler[0])} için henüz kayıtlı yükümlülük yok (beyannameler verilince "
+                      f"oluşur). Geçmiş dönemlere göre tahmin:\n\n" + r["cevap"])
+        return r
     if not satirlar:  # Kural 4: model çağrılmaz
         bos = BOS_SONUC.get(sorgu)  # bazı sorgularda "kayıt yok" da bir cevaptır
         return {"cevap": bos or CEKIMSER, "kaynaklar": [], "satirlar": [],

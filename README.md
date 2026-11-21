@@ -124,6 +124,8 @@ Her script sonunda kendi kontrolünü çalıştırır. `01` her çalıştığın
 
 Kurgusal çalışan ve bordro verisi (`data/csv/calisanlar.csv`, `bordrolar.csv`) depoda hazırdır; `01` bunları da yükler. Yeniden üretmek için `python scripts/00_bordro_uret.py` (sabit seed, her seferinde aynı veri; brüt toplam = muhtasar / 0,15, gelir vergisi toplamı = muhtasar). Mevcut bir veritabanında tablolar ilk bağlantıda kendiliğinden eklenir, veri silinmez.
 
+**Bugünün tarihi:** Asistan varsayılan olarak gerçek tarihi kullanır. Son ödeme tarihi geçmiş ve ödenmemiş kayıtlar otomatik olarak "Gecikti" sayılır; "bu ay / geçen ay / yaklaşan" buna göre hesaplanır. Sunum için senaryo gününü sabitlemek isterseniz `.env` dosyasına `BUGUN=2026-11-11` yazın. Testler (`pytest`) her zaman senaryo gününde çalışır (`tests/conftest.py`).
+
 ### Arayüzü başlat
 
 ```bash
@@ -190,7 +192,7 @@ Not: Test seti küçüktür (15 soru) ve prompt'lar bu sorular gözetilerek iyil
 ```
 muhasebe-asistani/
 ├── app/
-│   ├── config.py        # ayarlar (.env), yollar, chunk boyutu, senaryo tarihi
+│   ├── config.py        # ayarlar (.env), yollar, chunk boyutu, "bugün" (gerçek tarih; .env BUGUN ile sabitlenebilir)
 │   ├── db.py            # SQLite: SORGULAR menüsü, calistir(), talepler, giriş (bcrypt)
 │   ├── niyet.py         # soru → {niyet, sorgu, parametreler} + kod kuralları
 │   ├── kayit.py         # SQL sonucu → cevap (toplam Python'da, şablon/denetim)

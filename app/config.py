@@ -1,5 +1,6 @@
 """Projenin tüm sabitleri tek yerde. Model adlarını .env dosyasından değiştir."""
 import os
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,7 +20,9 @@ LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:1.5b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "embeddinggemma")
 N8N_URL = os.getenv("N8N_URL", "http://localhost:5678")
 
-BUGUN = "2026-11-11"  # Senaryonun "bugün"ü (CLAUDE.md §6)
+# "Bugün" = GERÇEK tarih: son tarihi geçen ödemeler "Gecikti" sayılır, "bu ay / geçen ay" buna göre hesaplanır.
+# Sunum/test için sabit bir gün istenirse .env'e  BUGUN=2026-11-11  yazın (CLAUDE.md §6 senaryo günü).
+BUGUN = os.getenv("BUGUN") or date.today().isoformat()
 # Token tabanlı parçalama (atölye d5_02 ile aynı: cl100k_base, 200/40 token).
 # Türkçede ~2,1 karakter/token -> ≈420/84 karakter.
 TOKENIZER = "cl100k_base"

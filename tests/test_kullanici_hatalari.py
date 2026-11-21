@@ -198,7 +198,10 @@ def test_beyannamedeki_net_ucret_toplami():  # RAG ortalamayı toplam diye veriy
 
 
 def test_bordro_olmayan_ay():
-    assert "bordrosu kayıtlarınızda yok" in bordro_cevabi("bu ay maaşlara ne kadar ödedim", "F001")["cevap"]
+    # Gelecek / henüz ödenmemiş ay -> son 3 ay ortalamasıyla TAHMİN; bordrosu olmayan GEÇMİŞ ay -> kayıt yok
+    c = bordro_cevabi("bu ay maaşlara ne kadar ödedim", "F001")["cevap"]
+    assert "henüz ödenmedi" in c and "tahmin" in c
+    assert "bordrosu kayıtlarınızda yok" in bordro_cevabi("ocak ayında ödediğim maaşlar", "F001")["cevap"]
 
 
 def test_turkce_ek_ile_isim_eslesir():
@@ -247,3 +250,188 @@ def test_beyanname_satiri_aynen(soru, firma, olmali, kaynak):
     from app.rag import beyanname_satiri
     c = beyanname_satiri(soru, firma)
     assert olmali in c and c.endswith(f"[kaynak: {kaynak}]")
+
+
+# --- Görevlere göre maaş ("paketleme elemanlarına geçen ay ödenen maaş", "eleman türlerine göre") ---
+def test_goreve_gore_gecen_ay():
+    r = bordro_cevabi("paketleme elemanlarına geçen ay ödenen maaş miktarı nedir", "F001")
+    ekim = [s for s in db.calistir("ay_bordrosu", "F001", "2026-10") if s["gorev"] == "Paketleme elemanı"]
+    assert {s["id"] for s in r["satirlar"]} == {s["id"] for s in ekim}
+    assert tl(round(sum(s["net_tl"] for s in ekim), 2)) in r["cevap"]
+
+
+def test_gorev_turlerine_gore_ozet():
+    r = bordro_cevabi("eleman türlerine göre maaş miktarları", "F001")
+    gorevler = {c["gorev"] for c in db.calistir("calisan_listesi", "F001")}
+    assert all(f"**{g}**" in r["cevap"] for g in gorevler)
+    assert tl(_ay_toplami("F001", "2026-10")["net_tl"]) in r["cevap"]  # genel toplam = ay toplamı
+
+
+@pytest.mark.parametrize("soru, gorev", [("şoförlere ne kadar maaş ödedim", "Şoför"),
+                                         ("üretim şefine ne kadar maaş ödendi", "Üretim şefi")])
+def test_gorev_eslestirme(soru, gorev):
+    assert {s["gorev"] for s in bordro_cevabi(soru, "F001")["satirlar"]} == {gorev}
+
+
+@pytest.mark.parametrize("soru", ["depo kirası ne kadar ödedim", "satış faturalarım ne kadar"])
+def test_kismi_gorev_kelimesi_bordro_degil(soru):  # "depo" / "satış" tek başına görev sayılmaz
+    assert not bordro_kalibi(soru, "F001")
+
+
+def test_maas_esigi_ve_karsilastirma():
+    r = bordro_cevabi("net maaşı 4000 TL üstü olan çalışanlar", "F001")
+    assert r["satirlar"] and all(s["net_tl"] > 4000 for s in r["satirlar"])
+    k = bordro_cevabi("maaş giderleri geçen aya göre arttı mı", "F001")["cevap"]
+    assert "Eylül 2026" in k and "Ekim 2026" in k and "azaldı" in k
+
+
+def test_personel_maliyeti():
+    t = _ay_toplami("F001", "2026-10")
+    sgk = db.calistir("durum", "F001", "SGK primi", "2026-10")[0]["tutar_tl"]
+    maliyet = round(t["brut_tl"] + round(sgk - t["sgk_isci_tl"] - t["issizlik_isci_tl"], 2), 2)
+    assert tl(maliyet) in bordro_cevabi("personel maliyetim ne kadar", "F001")["cevap"]
+
+
+def test_kidem():
+    en_eski = min(db.calistir("calisan_listesi", "F001"), key=lambda c: c["ise_giris"])
+    r = bordro_cevabi("en eski çalışanım kim", "F001")
+    assert len(r["satirlar"]) == 1 and en_eski["ad_soyad"] in r["cevap"]
+
+
+# --- Bugün = GERÇEK tarih: son tarihi geçmiş ödenmemiş kayıt "Gecikti" sayılır, yaklaşanlarda görünmez ---
+def test_son_tarihi_gecen_gecikti_sayilir(monkeypatch):
+    monkeypatch.setattr(db, "BUGUN", "2026-11-21")  # geçici vergi son günü 17.11.2026
+    assert [s["id"] for s in db.calistir("gecikmis", "F001")] == ["Y020"]
+    assert "Y020" not in [s["id"] for s in db.calistir("yaklasanlar", "F001", "5")]
+    bu_ay = {s["id"]: s["durum"] for s in db.calistir("ay_odemeleri", "F001", "2026-11")}
+    assert bu_ay["Y020"] == "Gecikti" and bu_ay["Y017"] == "Bekliyor"
+    assert {s["id"]: s["durum"] for s in db.yukumlulukler("F001")}["Y020"] == "Gecikti"  # panel kartları
+
+
+@pytest.mark.parametrize("soru", ["son ödeme tarihi geçmiş ödemeleri getir", "vadesi geçen borçlarım",
+                                  "son tarihi geçti mi ödemelerimin"])
+def test_gecikmis_ifadeleri(soru):
+    for model in ({"niyet": "belge", "sorgu": None, "parametreler": []},
+                  {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]}):
+        n = kural_duzelt(soru, model)
+        assert (n["niyet"], n["sorgu"]) == ("kayit", "gecikmis")
+
+
+# --- SSS: model "SGK primi ÖDEMEYEBİLİRSİNİZ" yazmıştı; SSS cevabı aynen + yanıltıcı ifade koruması ---
+def test_sss_aynen_ve_yaniltici_ifade():
+    from app.rag import YANILTICI, sss_cevabi
+    c = sss_cevabi("SGK primini geç ödersem ne olur?")
+    assert c.startswith("SGK primi son ödeme tarihinde ödenmezse") and c.endswith("[kaynak: sss.txt]")
+    assert YANILTICI.search("SGK primi ödemeyebilirsiniz.") and not YANILTICI.search(c)
+    n = kural_duzelt("SGK primini geç ödersem ne olur?", {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []})
+    assert n["niyet"] == "belge"
+
+
+
+# --- "kasım ayında ödenecek toplam maaç" (yazım hatası) yıllık vergi özetine gidiyordu ---
+def test_maas_yazim_hatasi_ve_gelecek_ay_tahmini():
+    son3 = [r for r in db.calistir("bordro_aylik_toplam", "F001")][-3:]
+    ort = round(sum(r["net_tl"] for r in son3) / 3, 2)
+    for soru in ["kasım ayında ödenecek toplam maaç ne kadar", "aralık ayında toplam ödenecek maaş tutarı ne"]:
+        assert bordro_kalibi(soru, "F001")
+        c = bordro_cevabi(soru, "F001")["cevap"]
+        assert "tahmin" in c and tl(ort) in c
+
+
+@pytest.mark.parametrize("soru, ay", [
+    ("gelecek ocak ayındaki toplam giderler ne kadar", "2027-01"), ("ocakta ödenecek vergiler", "2027-01"),
+    ("ocak ayında ödediğim KDV", "2026-01"), ("geçen aralık ödemelerim", "2025-12"),
+    ("aralık ayında toplam ödenecek maaş", "2026-12"),
+])
+def test_ay_adinin_yili(soru, ay):  # bugün Kasım 2026: geçmiş ay adı + gelecek zaman -> gelecek yıl
+    from app.niyet import _kucuk, _soru_ayi
+    assert _soru_ayi(_kucuk(soru)) == ay
+
+
+def test_aylik_gider_gelecek_ay():
+    n = kural_duzelt("gelecek ocak ayındaki toplam giderler ne kadar", {"niyet": "belge", "sorgu": None, "parametreler": []})
+    assert (n["sorgu"], n["parametreler"]) == ("aylik_gider", ["2027-01"])
+    db.planli_islem_ekle("F001", None, "Gider", "2027-01-05", 20000, "Depo kirası", "Ev sahibi")
+    c = cevapla_kayit("x", "F001", n)["cevap"]
+    for parca in ["KDV: yaklaşık", "Muhtasar: yaklaşık", "SGK primi: yaklaşık", "çalışana net yaklaşık",
+                  "Depo kirası", "20.000,00 TL", "Toplam: yaklaşık"]:
+        assert parca in c
+
+
+def test_aylik_gider_gecmis_ay_gercek():  # geçmiş ay: tahmin yok, ödenen vergi + ödenen net maaş
+    c = cevapla_kayit("x", "F001", {"sorgu": "aylik_gider", "parametreler": ["2026-10"]})["cevap"]
+    vergi = round(sum(s["tutar_tl"] for s in db.calistir("odenenler", "F001", "2026-10")), 2)
+    assert "yaklaşık" not in c and tl(round(vergi + _ay_toplami("F001", "2026-10")["net_tl"], 2)) in c
+
+
+def test_gelecek_ay_odemeleri_tahmin_ve_yaklasanlar():
+    r = cevapla_kayit("x", "F001", {"sorgu": "ay_odemeleri", "parametreler": ["2026-12"]})
+    assert "henüz kayıtlı yükümlülük yok" in r["cevap"] and "tahmin" in r["cevap"]
+    n = kural_duzelt("gelecek ödemelerim ne kadar", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]})
+    assert n["sorgu"] == "yaklasanlar"
+
+
+# --- "gecikmiş ödemelerimin faizi" : model ana borcu (54.938,65 TL) "faiz" diye sunmuştu ---
+def test_gecikme_faizi_ana_borcu_faiz_demez(monkeypatch):
+    import app.kayit as kayit
+    monkeypatch.setattr(db, "BUGUN", "2026-11-21")
+    monkeypatch.setattr(kayit, "BUGUN", "2026-11-21")
+    n = kural_duzelt("kasım ayında gecikmiş ödemelerimin faizi var mı varsa ne kadar",
+                     {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []})
+    assert (n["sorgu"], n["parametreler"]) == ("gecikme_faizi", ["2026-11"])
+    c = cevapla_kayit("x", "F001", n)["cevap"]
+    assert "ana borç **54.938,65 TL**" in c and "4 gündür gecikmiş" in c
+    assert "kayıtlarınızda yok" in c and "faiz değil" in c
+
+
+def test_model_cevabinda_uydurma_kavram_reddedilir():
+    from app.kayit import cevap_dogrula
+    veri = "Geçici vergi, 2026/3 dönemi: 54.938,65 TL, son ödeme tarihi 17.11.2026, durum: Gecikti"
+    satir = [{"tutar_tl": 54938.65, "durum": "Gecikti"}]
+    assert not cevap_dogrula("Gecikmiş ödemelerinizin faizi 54.938,65 TL'dir.", veri, satir)["gecerli"]
+    assert cevap_dogrula("Gecikmiş ödemeniz 54.938,65 TL'dir.", veri, satir)["gecerli"]
+
+
+@pytest.mark.parametrize("soru", ["gecikme zammı oranı nedir", "SGK primini geç ödersem ne olur?"])
+def test_genel_faiz_sorulari_belgeye(soru):
+    assert kural_duzelt(soru, {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []})["niyet"] == "belge"
+
+
+# --- "bir şoföre verilecek maaş": tekil + gelecek zaman (iki kişinin listesi ve Ekim geliyordu) ---
+def test_bir_sofore_verilecek_maas():
+    from app.bordro import maas_tahmini
+    t = maas_tahmini("F001", ["Şoför"])
+    c = bordro_cevabi("bir şoföre verilecek maaş nedir", "F001")["cevap"]
+    assert "Kasım 2026" in c and "bir Şoför için tahmini maaş" in c and tl(t["kisi_net"]) in c
+    assert "Merve Karaca" not in c  # kişi listesi değil, kişi başı tutar
+
+
+def test_bir_sofore_odenen_gecmis_ay():
+    ekim = [r for r in db.calistir("ay_bordrosu", "F001", "2026-10") if r["gorev"] == "Şoför"]
+    c = bordro_cevabi("bir şoföre ekimde ne kadar maaş ödendi", "F001")["cevap"]
+    assert tl(round(sum(r["net_tl"] for r in ekim) / len(ekim), 2)) in c and "ortalama net" in c
+
+
+def test_bir_ayda_tekil_sayilmaz():
+    c = bordro_cevabi("bir ayda ödenen toplam maaş miktarı ne kadar", "F001")["cevap"]
+    assert "Çalışanlara ödenen net toplam" in c
+
+
+# --- "gecikme zammı oranı nedir": model beyannamedeki "%14" (SGK işçi payı) satırını oran diye sunmuştu ---
+def test_yuzde_sorunun_satirinda_gecmeli():
+    from types import SimpleNamespace
+    from app.dogrulama import kanit_eslestir
+    d = [SimpleNamespace(page_content="- SGK işçi payı kesintisi (%14): 15.128,24 TL", metadata={"kaynak": "x.txt"})]
+    assert kanit_eslestir("Gecikme zammı oranı %14'tür.", d, "gecikme zammı oranı nedir")["uydurma_sayilar"]
+    assert not kanit_eslestir("SGK işçi payı %14'tür.", d, "sgk işçi payı oranı kaç")["uydurma_sayilar"]
+
+
+def test_belgede_olmayan_oran_durustce_soylenir(monkeypatch):
+    from types import SimpleNamespace
+    import app.rag as rag
+    parca = SimpleNamespace(page_content="Ücret ödemeleri özeti\n- SGK işçi payı kesintisi (%14): 15.128,24 TL\n"
+                                         "SGK primi gecikirse gecikme zammı uygulanır.",
+                            metadata={"kaynak": "F001_MUHSGK_2026-10.txt", "donem": "2026-10"})
+    monkeypatch.setattr(rag, "getir", lambda soru, firma_id: [(parca, 1.0, 1.0)])
+    monkeypatch.setattr(rag, "llm", lambda: (_ for _ in ()).throw(AssertionError("model çağrılmamalı")))
+    assert rag.cevapla_belge("gecikme zammı oranı nedir", "F001")["cevap"] == rag.ORAN_YOK
