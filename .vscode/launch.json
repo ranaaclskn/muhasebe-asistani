@@ -1,0 +1,28 @@
+{
+    // F5 / "Run and Debug" panelinden seçilir. Dosyalar modül olarak (python -m app.xxx)
+    // proje kökünden çalışır; böylece "No module named 'app.db'" hatası olmaz.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "MCP sunucusu (HTTP, F001)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.mcp_sunucu",
+            "args": ["--http"],
+            "cwd": "${workspaceFolder}",
+            "env": { "MUHASEBE_FIRMA_ID": "F001" },
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "MCP istemcisi (HTTP)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "app.mcp_istemci",
+            "args": ["--http"],
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "console": "integratedTerminal"
+        }
+    ]
+}
