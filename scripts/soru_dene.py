@@ -44,7 +44,10 @@ def main():
         if baska:
             print(f"    ⚠ soruda başka firma adı var ({baska}) -> yalnızca kendi firmanızın verisi gösterilir")
 
-        if n["niyet"] == "kayit":
+        if n["niyet"] == "kayit" and n["sorgu"] == "tahmin":  # SQL değil, Python hesabı
+            from app.kayit import tahmin_cevabi
+            print("[2] TAHMİN:\n" + tahmin_cevabi(firma_id, *n["parametreler"])["cevap"])
+        elif n["niyet"] == "kayit":
             satirlar = calistir(n["sorgu"], firma_id, *n["parametreler"])
             print(f"[2] SQL: {n['sorgu']} -> {len(satirlar)} satır")
             for s in satirlar:

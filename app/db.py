@@ -144,6 +144,18 @@ SORGULAR = {
                   ORDER BY son_odeme_tarihi, id
                   LIMIT CAST(coalesce(:adet, 5) AS INTEGER)""",
     },
+    # Tahmin için: bir türün SON dönemlerinin tutarları (durum fark etmez). Modelin menüsünde
+    # görünmez; yalnızca kod kullanır (kayit.tahmin_cevabi).
+    "donem_gecmisi": {
+        "aciklama": "Bir türün son 3 dönemdeki tutarları (tahmin için)",
+        "parametreler": ["tur"],
+        "menude_yok": True,
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND tur = :tur
+                  ORDER BY donem DESC
+                  LIMIT 3""",
+    },
     "odeme_gecmisi": {
         "aciklama": "Bir türün geçmiş ödemeleri, ne zaman ve ne kadar ödendiği (son 6 kayıt)",
         "parametreler": ["tur"],

@@ -22,6 +22,8 @@ AYLAR = ["ocak", "şubat", "mart", "nisan", "mayıs", "haziran", "temmuz",
 def _sorgu_menusu():
     satirlar = []
     for ad, s in SORGULAR.items():
+        if s.get("menude_yok"):  # yalnızca kodun kullandığı yardımcı sorgular
+            continue
         p = ", ".join(s["parametreler"] + [f"[{a}, isteğe bağlı]" for a in s.get("istege_bagli", [])])
         p = p or "parametre yok"
         satirlar.append(f'- "{ad}" ({p}): {s["aciklama"]}')
@@ -181,6 +183,14 @@ def kural_duzelt(soru, sonuc):
     if re.search(r"ücret|maaş|bordro", s) and sonuc["niyet"] != "belge":
         return {"niyet": "belge", "sorgu": None, "parametreler": [],
                 "duzeltme": f"ücret/maaş -> belge (model: {sonuc['niyet']})"}
+    # "önümüzdeki ay SGK primini tahmin et" -> TAHMİN: model bunu belgeye (RAG) gönderiyordu ve RAG
+    # haziran beyannamesinden alakasız bir cevap uyduruyordu. Tahmini KOD hesaplar (kayit.tahmin_cevabi).
+    if _tahmin_kalibi(s):
+        ay = _soru_ayi(s) or _ay_ekle(BUGUN[:7], 1)  # ay söylenmezse "önümüzdeki ay"
+        turler = {t for k, t in _TUR_KELIMELERI if k in s}
+        return {"niyet": "kayit", "sorgu": "tahmin",
+                "parametreler": [ay] + ([turler.pop()] if len(turler) == 1 else []),
+                "duzeltme": f"tahmin kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
     # Kesin kayıt kalıbı varsa model ne derse desin kayıt sorusudur (T04: model "belge" diyordu)
     kesin = _kesin_kayit(s)
     if kesin and sonuc["niyet"] != "kayit":
@@ -241,16 +251,21 @@ def kural_duzelt(soru, sonuc):
         sorgu, yeni = "ay_odemeleri", [bu_ay]
 
     adlar = SORGULAR[sorgu]["parametreler"]
-    ay_no = next((i for i, ay in enumerate(AYLAR, 1) if re.search(rf"\b{ay}", s)), None)
+    # Ay/dönem SORUDAN: ay adı (+yıl) ya da "bu ay / geçen ay / gelecek ay / önümüzdeki ay".
+    # Model soruda olmayan bir ay uydurabiliyor ("gelecek ay ödemelerim" -> Temmuz); soruda ay varsa o kazanır.
+    soru_ayi = _soru_ayi(s)
     yil = re.search(r"\b(20\d{2})\b", s)
     tur = next((t for k, t in _TUR_KELIMELERI if k in s), None)
     for i, ad in enumerate(adlar):
-        if ad in ("donem", "ay") and ay_no:
-            yeni[i] = f"{yil.group(1) if yil else '2026'}-{ay_no:02d}"
+        if ad in ("donem", "ay") and soru_ayi:
+            yeni[i] = soru_ayi
         elif ad == "tur" and tur:
             yeni[i] = tur
         elif ad == "yil":  # soruda yıl yazıyorsa o, "geçen yıl" ise bir önceki, yoksa bu yıl
             yeni[i] = yil.group(1) if yil else str(int(BUGUN[:4]) - ("geçen yıl" in s))
+    # Gelecekteki bir ayda "ödenmiş" kayıt olamaz: "gelecek ay ödemelerim" -> o ayın ödenecekleri
+    if sorgu == "odenenler" and yeni and yeni[0] > bu_ay:
+        sorgu = "ay_odemeleri"
 
     # İsteğe bağlı tür filtresi: soruda TEK ve AÇIK bir tür adı geçiyorsa uygula
     # ("vergi ve prim" gibi genel sorularda filtre yok; çıplak "prim" sayılmaz).
@@ -324,13 +339,22 @@ def _son_n_ay(s):
     return (_ay_ekle(bitis, -(max(n, 1) - 1)), bitis)
 
 
+def _tahmin_kalibi(s):
+    """'tahmin et', 'tahmini ne kadar', 'öngörün ne' -> gelecek ödeme TAHMİNİ istenmiş."""
+    return bool(re.search(r"tahmin|öngör|kestir", s))
+
+
 def _yaklasan_adet(s):
     """Kaç yaklaşan ödeme istendi? -> '3', '4', '5'... ya da None.
     Hem rakam hem yazı kabul edilir; sayı kelimeden önce de sonra da gelebilir:
-    'en yakın 3 ödeme', 'sıradaki dört ödemem', 'önümüzdeki 5 tane ödeme', '4 yaklaşan ödeme'."""
+    'en yakın 3 ödeme', 'sıradaki dört ödemem', 'önümüzdeki 5 tane ödeme', '4 yaklaşan ödeme'.
+    Yazım hatalarına dayanıklı: 'önümüzeki', 'önmüzdeki', 'siradaki', 'en yakin', 'odeme' de tutar
+    (arayüzde 'önümüzeki 4 ödeme' yazılınca model Temmuz ayını uydurmuştu)."""
     sayi = r"\d{1,2}|" + "|".join(sorted(_SAYILAR, key=len, reverse=True))  # "on iki" "on"dan önce
-    m = (re.search(rf"(?:en yakın|sıradaki|önümüzdeki|yaklaşan)\s+({sayi})\s+(?:tane\s+)?ödeme", s)
-         or re.search(rf"\b({sayi})\s+(?:tane\s+)?(?:yaklaşan|sıradaki|en yakın)\s+ödeme", s))
+    zaman = r"en yak[ıi]n|s[ıi]radaki|sonraki|ön\w*müz\w*|onumuz\w*|yakla[şs]an|gelecek|ileri\w*"
+    odeme = r"(?:tane\s+)?[öo]deme"
+    m = (re.search(rf"(?:{zaman})\s+(?:ilk\s+)?({sayi})\s+{odeme}", s)
+         or re.search(rf"\b({sayi})\s+(?:tane\s+)?(?:{zaman})\s+{odeme}", s))
     if not m:
         return None
     adet = int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]
@@ -381,7 +405,7 @@ def _planli_kalibi(s):
 def _soru_ayi(s):
     """Sorudaki ay ifadesi -> 'YYYY-AA' ya da None. 'bu ay', 'geçen ay', 'gelecek ay', ay adı (+yıl)."""
     bu_ay = BUGUN[:7]
-    if re.search(r"gelecek ay|önümüzdeki ay|haftaya ay", s):
+    if re.search(r"gelecek ay|ön\w*müz\w* ay|onumuz\w* ay|sonraki ay|haftaya ay", s):  # yazım hatası da tutar
         return _ay_ekle(bu_ay, 1)
     if "geçen ay" in s:
         return _onceki_ay(bu_ay)

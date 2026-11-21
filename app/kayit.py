@@ -24,6 +24,10 @@ BOS_SONUC = {
     "planli_odemeler": "Bu dönem için eklediğiniz planlı ödeme yok." + _EKLE,
     "beklenen_tahsilatlar": "Bu dönem için eklediğiniz beklenen tahsilat yok." + _EKLE,
     "nakit_plani": "Bu dönem için eklediğiniz planlı ödeme ya da tahsilat yok." + _EKLE,
+    # Gelecek ayların yükümlülükleri beyanname verilince oluşur; "bilgi yok" yerine tahmini öner
+    "ay_odemeleri": "Sorduğunuz ay için kayıtlarınızda ödenmemiş bir yükümlülük yok (ileri ayların tutarları "
+                    "beyanname verilince oluşur). Tahmin için “gelecek ay ne kadar ödeyeceğimi tahmin et” "
+                    "diye sorabilirsiniz.",
 }
 AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz",
          "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"]
@@ -219,10 +223,52 @@ def planli_aciklama_cevabi(soru, firma_id, esik=0.6):
             "yontem": "aciklama_arama"}
 
 
+AYLIK_TURLER = ["KDV", "Muhtasar", "SGK primi"]  # her ay ödenenler (geçici vergi 3 ayda bir)
+
+
+def tahmin_cevabi(firma_id, ay, tur=None):
+    """'Önümüzdeki ay SGK primim ne kadar olur?' -> o ay ödenecek tutar.
+    O ay son tarihli GERÇEK kayıt varsa onu söyler (tahmine gerek yok); yoksa son 3 dönemin
+    ortalamasını TAHMİN olarak verir. Hesabı Python yapar, model çağrılmaz (Kural 1)."""
+    satirlar, kaynaklar, toplam = [], [], 0.0
+    tahmin_var = False
+    for t in ([tur] if tur else AYLIK_TURLER):
+        kayitli = calistir("ay_odemeleri", firma_id, ay, t)
+        if kayitli:
+            s = kayitli[0]
+            deger = s["tutar_tl"]
+            satirlar.append(f"- **{t}**: {tl(deger)} — tahmin değil, kayıtta var "
+                            f"({donem_tr(s['donem'])} dönemi, son ödeme {tarih_tr(s['son_odeme_tarihi'])})")
+            kaynaklar.append(s["id"])
+        else:
+            gecmis = calistir("donem_gecmisi", firma_id, t)
+            if not gecmis:
+                satirlar.append(f"- **{t}**: geçmiş kaydı yok, tahmin edilemedi")
+                continue
+            tutarlar = [g["tutar_tl"] for g in gecmis]
+            deger = round(sum(tutarlar) / len(tutarlar), 2)
+            donemler = ", ".join(donem_tr(g["donem"]) for g in reversed(gecmis))
+            satirlar.append(f"- **{t}**: yaklaşık **{tl(deger)}** (son {len(gecmis)} dönemin ortalaması: "
+                            f"{donemler}; en düşük {tl(min(tutarlar))}, en yüksek {tl(max(tutarlar))})")
+            kaynaklar += [g["id"] for g in gecmis]
+            tahmin_var = True
+        toplam += deger
+    baslik = f"{donem_tr(ay)} içinde ödenecek tutar" + (" tahmini:" if tahmin_var else ":")
+    metin = baslik + "\n\n" + "\n".join(satirlar)
+    if not tur and len(satirlar) > 1:
+        metin += f"\n\n**Toplam: yaklaşık {tl(round(toplam, 2))}**"
+    if tahmin_var:
+        metin += ("\n\n_Bu bir tahmindir: kesin tutar, beyanname verilip tahakkuk oluşunca belli olur "
+                  "(çalışan sayısı, ücretler ve satışlar değişirse tutar da değişir)._")
+    return {"cevap": metin, "kaynaklar": kaynaklar, "satirlar": [], "yontem": "tahmin"}
+
+
 def cevapla_kayit(soru, firma_id, niyet):
     """niyet: niyet_belirle() çıktısı ({'sorgu', 'parametreler'}).
     Döner: {"cevap", "kaynaklar" (kayıt id'leri), "satirlar", "yontem": model|sablon|cekimser}"""
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
+    if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
+        return tahmin_cevabi(firma_id, *parametreler)
     satirlar = calistir(sorgu, firma_id, *parametreler)
     if not satirlar:  # Kural 4: model çağrılmaz
         bos = BOS_SONUC.get(sorgu)  # bazı sorgularda "kayıt yok" da bir cevaptır

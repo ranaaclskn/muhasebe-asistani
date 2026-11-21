@@ -14,7 +14,8 @@ sys.path.insert(0, str(KOK))
 
 import app.db as db  # noqa: E402
 from app.dogrulama import kanit_eslestir  # noqa: E402
-from app.kayit import cevapla_kayit, planli_aciklama_cevabi  # noqa: E402
+from app.bordro import bordro_cevabi, bordro_kayitlari  # noqa: E402
+from app.kayit import cevapla_kayit, planli_aciklama_cevabi, tl  # noqa: E402
 from app.niyet import kural_duzelt  # noqa: E402
 
 
@@ -56,6 +57,9 @@ def test_dogru_sayilar_gecer():
     ("önümüzdeki 6 tane ödemeyi listele", "yaklasanlar", ["6"]),
     ("2 yaklaşan ödememi göster", "yaklasanlar", ["2"]),
     ("en yakın on iki ödeme", "yaklasanlar", ["12"]),
+    ("önümüzeki 4 ödeme ne kadar", "yaklasanlar", ["4"]),  # yazım hatası (model Temmuz uydurmuştu)
+    ("siradaki 2 odeme", "yaklasanlar", ["2"]),
+    ("gelecek 3 ödemem ne", "yaklasanlar", ["3"]),
     # Ay toplamı: bu ay/gelecek -> ödenecekler, geçmiş ay -> o ay ödenenler
     ("kasım ayında gelen toplam ödeme ne kadar", "ay_odemeleri", ["2026-11"]),
     ("ekim ayında toplam ödeme ne kadar", "odenenler", ["2026-10"]),
@@ -106,3 +110,64 @@ def test_aciklama_aramasi():
     r = planli_aciklama_cevabi("ev satın alma ücreti ne", "F001")
     assert r and "450.000,00 TL" in r["cevap"] and "999" not in r["cevap"]
     assert planli_aciklama_cevabi("Geçici vergi ne zaman ödenir?", "F001") is None
+
+
+# --- Model soruda olmayan bir ay uydurursa soru kazanır ---
+@pytest.mark.parametrize("soru, sorgu, parametreler", [
+    ("önümüzeki 4 ödeme ne kadar", "yaklasanlar", ["4"]),
+    ("gelecek ay ödemelerim", "ay_odemeleri", ["2026-12"]),
+    ("önümüzeki ay ödemelerim", "ay_odemeleri", ["2026-12"]),
+])
+def test_uydurulan_ay_duzeltilir(soru, sorgu, parametreler):
+    model = {"niyet": "kayit", "sorgu": "odenenler", "parametreler": ["2026-07"]}  # arayüzde görülen
+    n = kural_duzelt(soru, model)
+    assert (n["sorgu"], n["parametreler"]) == (sorgu, parametreler)
+
+
+# --- Tahmin: "önümüzdeki ay SGK primini tahmin et" RAG'a gidip alakasız cevap veriyordu ---
+@pytest.mark.parametrize("soru, parametreler", [
+    ("önümüzdeki ay sgk primini tahmin eder misin", ["2026-12", "SGK primi"]),
+    ("gelecek ay ne kadar vergi ödeyeceğimi tahmin et", ["2026-12"]),
+    ("aralık KDV tahmini", ["2026-12", "KDV"]),
+])
+def test_tahmin_niyeti(soru, parametreler):
+    n = kural_duzelt(soru, {"niyet": "belge", "sorgu": None, "parametreler": []})
+    assert (n["niyet"], n["sorgu"], n["parametreler"]) == ("kayit", "tahmin", parametreler)
+
+
+def test_tahmin_son_3_donem_ortalamasi():
+    r = cevapla_kayit("x", "F001", {"sorgu": "tahmin", "parametreler": ["2026-12", "SGK primi"]})
+    gecmis = db.calistir("donem_gecmisi", "F001", "SGK primi")
+    ort = round(sum(g["tutar_tl"] for g in gecmis) / len(gecmis), 2)
+    assert len(gecmis) == 3 and tl(ort) in r["cevap"] and "tahmindir" in r["cevap"]
+
+
+def test_tahmin_kayit_varsa_gercek_tutar():
+    r = cevapla_kayit("x", "F001", {"sorgu": "tahmin", "parametreler": ["2026-11", "KDV"]})
+    assert "tahmin değil, kayıtta var" in r["cevap"] and "tahmindir" not in r["cevap"]
+
+
+# --- Maaş soruları RAG'da "kayıtlarınızda yok" diyordu; beyannamedeki brüt ücretten hesaplanır ---
+def test_bordro_toplam_ve_ortalama():
+    kayitlar = bordro_kayitlari("F001")
+    son = kayitlar[-1]
+    toplam = bordro_cevabi("bir ayda ödenen toplam maaş miktarı ne kadar", "F001")
+    assert tl(son["brut"]) in toplam["cevap"] and toplam["kaynaklar"] == [son["kaynak"]]
+    ort = bordro_cevabi("ortalama net maaş ne kadar", "F001")
+    assert "Net maaş tutarı kayıtlarınızda yok" in ort["cevap"]  # net UYDURULMAZ
+    assert tl(round(son["brut"] / son["calisan"], 2)) in ort["cevap"]
+
+
+def test_bordro_birkac_ay_ve_olmayan_ay():
+    r = bordro_cevabi("son 3 ayda ödenen maaşlar", "F001")
+    assert len(r["kaynaklar"]) == 3 and "Toplam" in r["cevap"]
+    assert "kayıtlarınızda yok" in bordro_cevabi("ocak ayı maaşları", "F001")["cevap"]
+
+
+@pytest.mark.parametrize("soru", ["ev satın alma ücreti ne", "KDV ne zaman ödenir?"])
+def test_bordro_disindaki_sorular_ragda_kalir(soru):
+    assert bordro_cevabi(soru, "F001") is None
+
+
+def test_bordro_firma_izolasyonu():
+    assert all(k["kaynak"].startswith("F002_") for k in bordro_kayitlari("F002"))

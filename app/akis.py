@@ -25,6 +25,7 @@ from app.config import VERI_DIR
 from app.db import belge_bul, firma_talepleri, kayitli_eposta, planli_islem_ekle, talep_ekle
 from app.emirler import (EKSIK_SORULARI, alan_cozumle, emir_cikar, evet_mi, iptal_mi,
                          talep_no_bul, talep_sorgu_kalibi)
+from app.bordro import bordro_cevabi
 from app.kayit import cevapla_kayit, donem_tr, planli_aciklama_cevabi, tarih_tr, tl
 from app.log import log_yaz
 from app.niyet import baska_firma_adi, niyet_belirle
@@ -75,6 +76,10 @@ def rag_dugumu(d: Durum):
     kendi = planli_aciklama_cevabi(d["soru"], d["firma_id"])
     if kendi:
         return {"cevap": kendi["cevap"], "kaynaklar": kendi["kaynaklar"], "arac": "sql"}
+    # Maaş/ücret soruları: beyannamedeki brüt ücret + çalışan sayısından KOD hesaplar (RAG hesap yapamıyordu)
+    bordro = bordro_cevabi(d["soru"], d["firma_id"])
+    if bordro:
+        return {"cevap": bordro["cevap"], "kaynaklar": bordro["kaynaklar"], "arac": "belge"}
     r = cevapla_belge(d["soru"], d["firma_id"])
     kaynak = [r["kanit"]["kaynak"]] if r["atif"] else []  # yalnızca cevapta kullanılan kaynak
     return {"cevap": r["cevap"], "kaynaklar": kaynak, "arac": "rag"}
