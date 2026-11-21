@@ -223,6 +223,13 @@ def kural_duzelt(soru, sonuc):
     elif _yil_odeme_kalibi(s) and sorgu != "yil_odenenler":
         sorgu, yeni = "yil_odenenler", [BUGUN[:4]]
     # "ekim ayında ödenen / geçen ay ödediğim" -> ödenmiş kayıtlar (ödeme tarihine göre)
+    # "en yakın 3 / 4 / beş ödeme" -> yaklaşanlar, ADET sorudan KODLA alınır
+    # (model LIMIT 1'li en_yakin seçiyordu, 3 istenince 1 kayıt geliyordu)
+    elif _yaklasan_adet(s):
+        sorgu, yeni = "yaklasanlar", [_yaklasan_adet(s)]
+    # "kasım ayında toplam ödeme ne kadar" -> o ayın ödemeleri (model yil_odenenler seçiyordu)
+    elif _ay_toplam_sorgusu(s) and sorgu != _ay_toplam_sorgusu(s):
+        sorgu, yeni = _ay_toplam_sorgusu(s), [_soru_ayi(s)]
     elif re.search(r"ödenen\b|ödedi|ödemiş", s) and ay_ifadesi and sorgu != "odenenler":
         sorgu, yeni = "odenenler", [gecen_ay if "geçen ay" in s else bu_ay]
     # "Ağustos KDV'sini ne zaman ödedim?" DÖNEM sorusudur (ödeme ayı değil) -> durum
@@ -280,6 +287,10 @@ def _kesin_kayit(s):
         return "odeme_araligi"
     if _yil_odeme_kalibi(s):
         return "yil_odenenler"
+    if _yaklasan_adet(s):
+        return "yaklasanlar"
+    if _ay_toplam_sorgusu(s):
+        return _ay_toplam_sorgusu(s)
     if re.search(r"ayında|ayı içinde|geçen ay|bu ay", s) and re.search(r"ödenen\b|ödedi|ödemiş", s):
         return "odenenler"
     if re.search(r"\bbu ay", s) and re.search(r"öde(yece|me|necek)", s):
@@ -311,6 +322,31 @@ def _son_n_ay(s):
     n = int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]
     bitis = _onceki_ay(BUGUN[:7])
     return (_ay_ekle(bitis, -(max(n, 1) - 1)), bitis)
+
+
+def _yaklasan_adet(s):
+    """Kaç yaklaşan ödeme istendi? -> '3', '4', '5'... ya da None.
+    Hem rakam hem yazı kabul edilir; sayı kelimeden önce de sonra da gelebilir:
+    'en yakın 3 ödeme', 'sıradaki dört ödemem', 'önümüzdeki 5 tane ödeme', '4 yaklaşan ödeme'."""
+    sayi = r"\d{1,2}|" + "|".join(sorted(_SAYILAR, key=len, reverse=True))  # "on iki" "on"dan önce
+    m = (re.search(rf"(?:en yakın|sıradaki|önümüzdeki|yaklaşan)\s+({sayi})\s+(?:tane\s+)?ödeme", s)
+         or re.search(rf"\b({sayi})\s+(?:tane\s+)?(?:yaklaşan|sıradaki|en yakın)\s+ödeme", s))
+    if not m:
+        return None
+    adet = int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]
+    return str(adet) if adet > 0 else None
+
+
+def _ay_toplam_sorgusu(s):
+    """'kasım ayında toplam ödeme ne kadar', 'aralıkta hangi ödemeler var' -> o AYIN ödemeleri.
+    Geçmiş ay -> 'odenenler' (o ay ödenenler), bu ay / gelecek -> 'ay_odemeleri' (ödenecekler).
+    Tür adı geçiyorsa (Eylül SGK ödemesi) dönem sorusudur, buraya girmez."""
+    ay = _soru_ayi(s)
+    if not ay or "ödeme" not in s or not re.search(r"toplam|ne kadar|hangi|neler", s):
+        return None
+    if re.search(r"ödenen\b|ödedi|ödemiş|yıl|gecik|beyan", s) or any(k in s for k, _ in _TUR_KELIMELERI):
+        return None
+    return "odenenler" if ay < BUGUN[:7] else "ay_odemeleri"
 
 
 def _firma_kalibi(s):

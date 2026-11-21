@@ -134,6 +134,16 @@ SORGULAR = {
                   ORDER BY son_odeme_tarihi, id
                   LIMIT 1""",
     },
+    "yaklasanlar": {
+        "aciklama": "Bugünden sonraki ödenmemiş ödemeler, en yakından başlayarak (en yakın 3 / 5 ödeme)",
+        "parametreler": [],
+        "istege_bagli": ["adet"],  # kaç kayıt istendi; verilmezse 5
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND durum != 'Ödendi' AND son_odeme_tarihi >= :bugun
+                  ORDER BY son_odeme_tarihi, id
+                  LIMIT CAST(coalesce(:adet, 5) AS INTEGER)""",
+    },
     "odeme_gecmisi": {
         "aciklama": "Bir türün geçmiş ödemeleri, ne zaman ve ne kadar ödendiği (son 6 kayıt)",
         "parametreler": ["tur"],

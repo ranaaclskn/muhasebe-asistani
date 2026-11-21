@@ -73,7 +73,7 @@ def veri_hazirla(sorgu, satirlar):
     toplam = None
     # Faturalar burada YOK: alış (gider) ve satış (gelir) toplanırsa anlamsız bir rakam çıkar;
     # onların ayrı toplamları sablon_cevap'ta hesaplanır.
-    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis",
+    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis", "yaklasanlar",
                   "planli_odemeler", "beklenen_tahsilatlar")
             and len(satirlar) > 1):
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
@@ -127,6 +127,7 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
               "yil_odenenler": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_araligi": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_gecmisi": "Son ödemeleriniz:",
+              "yaklasanlar": f"Sıradaki {n} ödemeniz:",
               "gec_odenenler": f"{n} ödeme son tarihinden sonra (geç) yapılmış:",
               "faturalar": f"{n} fatura:",
               "planli_odemeler": f"{n} planlı ödemeniz var (sizin eklediğiniz kayıtlar):",
@@ -138,6 +139,9 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
         s0 = satirlar[0]
         baslik = (f"En son {s0['tur']} ödemeniz **{tarih_tr(s0['odeme_tarihi'])}** tarihinde yapıldı "
                   f"({donem_tr(s0['donem'])} dönemi, {tl(s0['tutar_tl'])}).\n\n{baslik}")
+    # "5 ödeme göster" ama yaklaşan yalnızca 4 kayıt var -> eksik geldiğini AÇIKÇA söyle
+    if sorgu == "yaklasanlar" and parametreler and int(parametreler[0]) > n:
+        baslik = f"{parametreler[0]} ödeme istediniz; kayıtlarda yaklaşan yalnızca {n} ödeme var:"
     if sorgu in ("yil_odenenler", "odeme_araligi"):  # çok kayıt olur -> türe göre grupla
         gruplar = {}
         for s in satirlar:

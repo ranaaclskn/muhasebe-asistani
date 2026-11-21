@@ -49,10 +49,32 @@ def test_dogru_sayilar_gecer():
     ("eylül ayında kaç tl gecikmiş ödemem vardı", "gec_odenenler", []),
     ("son 1 sene içinde ödediğim gecikmiş ödeme tutarı nedir", "gec_odenenler", []),
     ("Gecikmiş ödemem var mı?", "gecikmis", []),
+    # Yaklaşan ödemeler: kaç tane istenirse o kadar (rakam ya da yazıyla)
+    ("önümüzdeki en yakın 3 ödemeyi göster", "yaklasanlar", ["3"]),
+    ("en yakın 4 ödememi göster", "yaklasanlar", ["4"]),
+    ("sıradaki beş ödemem ne", "yaklasanlar", ["5"]),
+    ("önümüzdeki 6 tane ödemeyi listele", "yaklasanlar", ["6"]),
+    ("2 yaklaşan ödememi göster", "yaklasanlar", ["2"]),
+    ("en yakın on iki ödeme", "yaklasanlar", ["12"]),
+    # Ay toplamı: bu ay/gelecek -> ödenecekler, geçmiş ay -> o ay ödenenler
+    ("kasım ayında gelen toplam ödeme ne kadar", "ay_odemeleri", ["2026-11"]),
+    ("ekim ayında toplam ödeme ne kadar", "odenenler", ["2026-10"]),
 ])
 def test_niyet_kurallari(soru, sorgu, parametreler):
     n = kural_duzelt(soru, {"niyet": "belge", "sorgu": None, "parametreler": []})
     assert (n["niyet"], n["sorgu"], n["parametreler"]) == ("kayit", sorgu, parametreler)
+
+
+@pytest.mark.parametrize("adet", ["3", "4"])
+def test_yaklasanlar_istenen_adet_kadar(adet):
+    r = cevapla_kayit("en yakın ödemeler", "F001", {"sorgu": "yaklasanlar", "parametreler": [adet]})
+    assert len(r["satirlar"]) == int(adet)
+    assert r["cevap"].startswith(f"Sıradaki {adet} ödemeniz")
+
+
+def test_yaklasanlar_az_kayit_varsa_soyler():
+    r = cevapla_kayit("en yakın 10 ödeme", "F001", {"sorgu": "yaklasanlar", "parametreler": ["10"]})
+    assert len(r["satirlar"]) < 10 and "10 ödeme istediniz" in r["cevap"]
 
 
 @pytest.mark.parametrize("soru", ["SGK primini geç ödersem ne olur?", "Geçici vergi ne zaman ödenir?"])
