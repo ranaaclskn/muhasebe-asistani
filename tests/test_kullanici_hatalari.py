@@ -435,3 +435,36 @@ def test_belgede_olmayan_oran_durustce_soylenir(monkeypatch):
     monkeypatch.setattr(rag, "getir", lambda soru, firma_id: [(parca, 1.0, 1.0)])
     monkeypatch.setattr(rag, "llm", lambda: (_ for _ in ()).throw(AssertionError("model çağrılmamalı")))
     assert rag.cevapla_belge("gecikme zammı oranı nedir", "F001")["cevap"] == rag.ORAN_YOK
+
+
+# --- "maaş giderleri geçmiş 3 aya göre arttı mı" yalnız Eylül → Ekim karşılaştırıyordu ---
+def test_gecmis_n_aya_gore_ortalama():
+    t = db.calistir("bordro_aylik_toplam", "F001")
+    ort = round(sum(r["net_tl"] for r in t[-4:-1]) / 3, 2)  # Ekim'den önceki 3 ay
+    c = bordro_cevabi("maaş giderleri geçmiş 3 aya göre arttı mı", "F001")["cevap"]
+    assert "önceki 3 ayın" in c and tl(ort) in c and "Temmuz 2026" in c
+
+
+def test_son_n_ayda_gidisat_ve_n_ay_oncesi():
+    c = bordro_cevabi("maaş giderleri son 3 ayda arttı mı", "F001")["cevap"]
+    assert "gidişatı" in c and "Eylül'e göre" in c and "Ağustos'a göre" in c
+    c = bordro_cevabi("maaş giderleri 3 ay öncesine göre nasıl", "F001")["cevap"]
+    assert "Temmuz 2026 → Ekim 2026" in c
+
+
+# --- İşe alım: "son bir senede kaç kişi işe alındı" firma kartına / kapsam dışına gidiyordu ---
+@pytest.mark.parametrize("soru", ["son bir senede kaç kişi işe alındı", "son bir senede işe alınan kişiler kimler"])
+def test_ise_alim_yolu(soru, monkeypatch):
+    import app.bordro as bordro
+    monkeypatch.setattr(bordro, "BUGUN", "2026-11-21")
+    assert bordro_kalibi(soru, "F001")
+    c = bordro_cevabi(soru, "F001")["cevap"]
+    en_son = max(db.calistir("calisan_listesi", "F001"), key=lambda c: c["ise_giris"])
+    assert "işe alınan çalışan **yok**" in c and en_son["ad_soyad"] in c  # 10.08.2025'ten beri alım yok
+
+
+def test_ise_alim_yil_ve_maliyet():
+    c = bordro_cevabi("2025 yılında işe alınanlar", "F001")
+    beklenen = [x for x in db.calistir("calisan_listesi", "F001") if x["ise_giris"].startswith("2025")]
+    assert {x["id"] for x in c["satirlar"]} == {x["id"] for x in beklenen}
+    assert "toplam net maaş giderinin %" in c["cevap"]

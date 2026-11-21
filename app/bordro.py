@@ -19,7 +19,11 @@ from app.niyet import _SAYILAR, _ay_ekle, _kucuk, _onceki_ay, _soru_ayi
 KISI = r"(?:çalışan|personel|eleman|işçi)\w*"
 ODEME = r"öde|maaş|ücret|net|brüt|kesinti|kesil|ne kadar|aldı|alıyor|kazan|bordro|para|maliyet"
 KIDEM = r"en eski|en kıdemli|en uzun süre|en yeni|en son işe|yeni başla|kaç yıl|ne zamandır|kıdem"
-KARSILASTIR = r"geçen aya göre|önceki aya göre|bir önceki|arttı|azaldı|değiş|fark|artış|düşüş|kıyasla|karşılaştır"
+KARSILASTIR = (r"geçen aya göre|önceki aya göre|bir önceki|arttı|azaldı|değiş|fark|artış|düşüş|kıyasla|"
+               r"karşılaştır|ay öncesine|aya göre|aylara göre|ayına göre|nazaran")
+# İşe alım / işten ayrılış ("son bir senede kaç kişi işe alındı", "bu yıl işe alınanlar kimler")
+ISE_ALIM = (r"işe (?:al|gir|başla)\w*|yeni (?:çalışan|personel|eleman|işçi)\w*|istihdam|eleman al\w*|"
+            r"personel al\w*|alım yap\w*|işten (?:çık|ayrıl)\w*")
 GRUPLA = (r"(?:görev|tür|pozisyon|unvan|meslek|departman|rol)\w*\s+(?:göre|bazında|bazlı)|"
           r"görev görev|her (?:bir )?görev")
 _EKLER = {"", "e", "a", "ye", "ya", "i", "ı", "u", "ü", "yi", "yı", "yu", "yü", "in", "ın", "un", "ün",
@@ -99,6 +103,9 @@ def bordro_kalibi(soru, firma_id=None):
     if re.search(r"toplam gider|tüm gider|bütün gider|giderler|harcama|masraf|nakit çıkış|para çıkış", s) \
             and not re.search(r"personel|maaş gider|ücret gider|işçilik", s):
         return False
+    # "son bir senede kaç kişi işe alındı" firma kartına, "işe alınanlar kimler" kapsam dışına gidiyordu
+    if re.search(ISE_ALIM, s):
+        return True
     if re.search(r"maaş|bordro|brüt ücret|net ücret|ortalama ücret|ödenen ücret|ücret toplam|"
                  rf"{KISI}\s+(?:\w+\s+)?ücret|ücret\w*\s+(?:gideri|ödeme)", s):
         return True
@@ -249,13 +256,10 @@ def _kisi_cevabi(s, kisi, firma_id):
              f"({_sure(kisi['ise_giris'])}).")
     if re.search(r"görev|ne iş|işe gir|ne zaman başla|" + KIDEM, s) and not re.search(ODEME, s):
         return _sonuc(bilgi, [f"calisan:{kisi['id']}"])
-    if re.search(KARSILASTIR, s) and len(satirlar) >= 2:  # "Gamze'nin maaşı geçen aya göre arttı mı"
-        son = next((r for r in satirlar if r["donem"] == aylar[-1]), satirlar[-1]) if len(aylar) == 1 else satirlar[-1]
-        onceki = satirlar[satirlar.index(son) - 1] if satirlar.index(son) else None
-        if onceki:
-            return _sonuc(f"{bilgi}\n\n{_degisim('Net maaş', onceki['donem'], onceki['net_tl'], son['donem'], son['net_tl'])}\n"
-                          f"{_degisim('Brüt maaş', onceki['donem'], onceki['brut_tl'], son['donem'], son['brut_tl'])}",
-                          [onceki["id"], son["id"]], [onceki, son])
+    if re.search(KARSILASTIR, s) and len(satirlar) >= 2:  # "Gamze'nin maaşı son 3 aya göre arttı mı"
+        ref = aylar[-1] if len(aylar) == 1 else None
+        metin, kullanilan = _karsilastir(s, satirlar, f"{kisi['ad_soyad']} maaşı", ref)
+        return _sonuc(f"{bilgi}\n\n{metin}", [r["id"] for r in kullanilan], kullanilan)
     kaynaklar = [r["id"] for r in secilen]
     if len(secilen) == 1:
         r = secilen[0]
@@ -295,6 +299,65 @@ def _calisan_listesi(firma_id, gorevler=None):
     kim = f"{', '.join(gorevler)} görevinde" if gorevler else "Kayıtlı"
     return _sonuc(f"{kim} {len(calisanlar)} çalışanınız var:\n\n{liste}", [f"calisan:{c['id']}" for c in calisanlar],
                   calisanlar)
+
+
+def _zaman_araligi(s):
+    """'son bir senede', 'son 6 ayda', 'bu yıl', 'geçen yıl', '2025 yılında' -> (başlangıç, bitiş, etiket)."""
+    sayi = r"(\d{1,2}|" + "|".join(sorted(_SAYILAR, key=len, reverse=True)) + r")"
+    y = int(BUGUN[:4])
+    sayiya = lambda x: int(x) if x.isdigit() else _SAYILAR[x]  # noqa: E731
+    if m := re.search(rf"son {sayi} (?:yıl|sene)", s):
+        n = sayiya(m.group(1))
+        return f"{y - n}{BUGUN[4:]}", BUGUN, f"Son {n} yılda ({tarih_tr(f'{y - n}{BUGUN[4:]}')} – {tarih_tr(BUGUN)})"
+    if m := re.search(rf"son {sayi} ay", s):
+        n = sayiya(m.group(1))
+        bas = _ay_ekle(BUGUN[:7], -n) + BUGUN[7:]
+        return bas, BUGUN, f"Son {n} ayda ({tarih_tr(bas)} – {tarih_tr(BUGUN)})"
+    if re.search(r"bu yıl|bu sene", s):
+        return f"{y}-01-01", BUGUN, f"{y} yılında"
+    if re.search(r"geçen yıl|geçen sene", s):
+        return f"{y - 1}-01-01", f"{y - 1}-12-31", f"{y - 1} yılında"
+    if m := re.search(r"\b(20\d{2})\b", s):
+        return f"{m.group(1)}-01-01", f"{m.group(1)}-12-31", f"{m.group(1)} yılında"
+    return None
+
+
+def _ise_alim_cevabi(s, firma_id, calisanlar):
+    """İşe alımlar: kaç kişi, kimler, ve bunların maaşlarının aylık gidere etkisi (son bordro ayı)."""
+    if re.search(r"işten (?:çık|ayrıl)", s):
+        return _sonuc(f"Kayıtlarda işten ayrılış bilgisi tutulmuyor; şu an kayıtlı {len(calisanlar)} çalışanın "
+                      f"tamamı aktif görünüyor. İşten ayrılışlar için muhasebecinize danışabilirsiniz.",
+                      ["calisanlar"])
+    sirali = sorted(calisanlar, key=lambda c: c["ise_giris"], reverse=True)
+    aralik = _zaman_araligi(s)
+    if not aralik:  # zaman yok: yıllara göre özet + en son işe girenler
+        yillar = {}
+        for c in sirali:
+            yillar.setdefault(c["ise_giris"][:4], []).append(c)
+        ozet = "\n".join(f"- {y}: {len(cs)} kişi" for y, cs in sorted(yillar.items(), reverse=True))
+        son3 = "\n".join(f"- {c['ad_soyad']} — {c['gorev']}, {tarih_tr(c['ise_giris'])}" for c in sirali[:3])
+        return _sonuc(f"Kayıtlı {len(calisanlar)} çalışanın işe giriş yıllarına göre dağılımı:\n\n{ozet}\n\n"
+                      f"En son işe girenler:\n\n{son3}", ["calisanlar"], sirali)
+    bas, bit, etiket = aralik
+    secilen = [c for c in sirali if bas <= c["ise_giris"] <= bit]
+    if not secilen:
+        en_son = sirali[0]
+        return _sonuc(f"{etiket} işe alınan çalışan **yok**. En son işe giren: {en_son['ad_soyad']} "
+                      f"({en_son['gorev']}, {tarih_tr(en_son['ise_giris'])}). Şu an kayıtlı {len(calisanlar)} "
+                      f"çalışanınız var.", ["calisanlar"])
+    liste = "\n".join(f"- {c['ad_soyad']} — {c['gorev']}, işe giriş {tarih_tr(c['ise_giris'])}" for c in secilen)
+    # Gidere etkisi: bu kişilerin son bordro ayındaki maaşları
+    son_ay = calistir("bordro_aylik_toplam", firma_id)[-1]
+    idler = {c["id"] for c in secilen}
+    maas = [r for r in calistir("ay_bordrosu", firma_id, son_ay["donem"]) if r["calisan_id"] in idler]
+    etki = ""
+    if maas:
+        net, brut = round(sum(r["net_tl"] for r in maas), 2), round(sum(r["brut_tl"] for r in maas), 2)
+        oran = f"{net / son_ay['net_tl'] * 100:.1f}".replace(".", ",") if son_ay["net_tl"] else ""
+        etki = (f"\n\nBu çalışanların {donem_tr(son_ay['donem'])} maaşları: net **{tl(net)}** (brüt {tl(brut)})"
+                + (f"; bu, o ayki toplam net maaş giderinin %{oran}'i." if oran else "."))
+    return _sonuc(f"{etiket} işe alınan **{len(secilen)} çalışan**:\n\n{liste}{etki}",
+                  [f"calisan:{c['id']}" for c in secilen], secilen)
 
 
 def _kidem_cevabi(s, firma_id):
@@ -386,18 +449,80 @@ def _esik_cevabi(s, esik, satirlar, ay):
     return _sonuc(f"{donem_tr(ay)} ayında {ifade} olan {len(secilen)} çalışan:\n\n{liste}", [f"bordro:{ay}"], secilen)
 
 
-def _karsilastirma(secilen, toplamlar):
-    """Firma toplamı: seçilen ay vs bir önceki bordro ayı."""
-    son = secilen[-1]
-    i = toplamlar.index(son)
+def _yonelme(ad):
+    """Ay adına yönelme eki (ünlü uyumu): Eylül'e, Ekim'e, Ağustos'a, Kasım'a."""
+    son_unlu = next((h for h in reversed(ad.lower()) if h in "aeıioöuü"), "a")
+    return f"{ad}'{'e' if son_unlu in 'eiöü' else 'a'}"
+
+
+def _fark(eski, yeni):
+    """'**24.195,56 TL azaldı** (%24,4)'"""
+    fark = round(yeni - eski, 2)
+    if not fark:
+        return "**değişmedi**"
+    yuzde = f" (%{abs(fark) / eski * 100:.1f})".replace(".", ",") if eski else ""
+    return f"**{tl(abs(fark))} {'arttı' if fark > 0 else 'azaldı'}**{yuzde}"
+
+
+def _karsilastir(s, satirlar, baslik, ref=None):
+    """Maaş karşılaştırması (firma toplamı ya da tek çalışan). satirlar: donem sırasıyla, net_tl/brut_tl.
+      - 'geçen aya göre'                -> bir önceki ay
+      - 'geçmiş / son 3 aya göre'       -> son ay vs ÖNCEKİ 3 ayın ORTALAMASI (+ ay ay liste)
+      - 'son 3 ayda arttı mı'           -> 3 aylık GİDİŞAT (her ay bir öncekine göre)
+      - '3 ay öncesine göre'            -> 3 ay önceki ayla
+    (Önceden 'geçmiş 3 aya göre' sorusu da yalnız Eylül → Ekim karşılaştırıyordu.)"""
+    sayi = r"(\d{1,2}|" + "|".join(sorted(_SAYILAR, key=len, reverse=True)) + r")"
+    m = (re.search(rf"(?:geçmiş|son|önceki|evvelki)\s+{sayi}\s+ay", s)
+         or re.search(rf"\b{sayi}\s+ay(?:lık| önce)", s))
+    n = (int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]) if m else 1
+    donemler = [r["donem"] for r in satirlar]
+    i = donemler.index(ref) if ref in donemler else len(satirlar) - 1
+    son = satirlar[i]
     if i == 0:
-        return _sonuc(f"{donem_tr(son['donem'])} öncesine ait bordro kaydı yok, karşılaştırılamıyor.", [])
-    onceki = toplamlar[i - 1]
-    return _sonuc(f"Çalışanlara ödenen maaşlar, {donem_tr(onceki['donem'])} → {donem_tr(son['donem'])}:\n\n"
-                  f"{_degisim('Net toplam', onceki['donem'], onceki['net_tl'], son['donem'], son['net_tl'])}\n"
-                  f"{_degisim('Brüt toplam', onceki['donem'], onceki['brut_tl'], son['donem'], son['brut_tl'])}\n"
-                  f"- Çalışan sayısı: {onceki['kisi']} → {son['kisi']}",
-                  [f"bordro:{onceki['donem']}", f"bordro:{son['donem']}"], [onceki, son])
+        return f"{donem_tr(son['donem'])} öncesine ait bordro kaydı yok, karşılaştırılamıyor.", [son]
+    ay_ay = lambda rs: " · ".join(f"{donem_tr(r['donem'])} {tl(r['net_tl'])}" for r in rs)  # noqa: E731
+
+    if n > 1 and re.search(rf"{sayi}\s+ay önce", s):  # "3 ay öncesine göre": tek bir ayla
+        j = max(0, i - n)
+        o = satirlar[j]
+        return (f"{baslik}, {donem_tr(o['donem'])} → {donem_tr(son['donem'])}:\n\n"
+                f"- Net: {tl(o['net_tl'])} → {tl(son['net_tl'])}; {_fark(o['net_tl'], son['net_tl'])}\n"
+                f"- Brüt: {tl(o['brut_tl'])} → {tl(son['brut_tl'])}; {_fark(o['brut_tl'], son['brut_tl'])}"), [o, son]
+
+    if n > 1 and re.search(r"göre|ortalama|kıyasla|nazaran|karşı", s):  # son ay vs önceki n ayın ortalaması
+        onceki = satirlar[max(0, i - n):i]
+        net_ort = round(sum(r["net_tl"] for r in onceki) / len(onceki), 2)
+        brut_ort = round(sum(r["brut_tl"] for r in onceki) / len(onceki), 2)
+        eksik = f" (yalnızca {len(onceki)} ayın kaydı var)" if len(onceki) < n else ""
+        return (f"{baslik} — {donem_tr(son['donem'])}, önceki {len(onceki)} ayın "
+                f"({_aralik_adi([r['donem'] for r in onceki])}) ortalamasıyla{eksik}:\n\n"
+                f"- Net: {donem_tr(son['donem'])} {tl(son['net_tl'])}, önceki {len(onceki)} ay ortalaması "
+                f"{tl(net_ort)} → {_fark(net_ort, son['net_tl'])}\n"
+                f"- Brüt: {donem_tr(son['donem'])} {tl(son['brut_tl'])}, önceki {len(onceki)} ay ortalaması "
+                f"{tl(brut_ort)} → {_fark(brut_ort, son['brut_tl'])}\n\n"
+                f"Ay ay net: {ay_ay(onceki + [son])}"), onceki + [son]
+
+    if n > 1:  # "son 3 ayda arttı mı": gidişat
+        pencere = satirlar[max(0, i - n + 1):i + 1]
+        satir = [f"- {donem_tr(pencere[0]['donem'])}: net {tl(pencere[0]['net_tl'])}"]
+        for a, b in zip(pencere, pencere[1:]):
+            satir.append(f"- {donem_tr(b['donem'])}: net {tl(b['net_tl'])} — {_yonelme(donem_tr(a['donem']).split()[0])} "
+                         f"göre {_fark(a['net_tl'], b['net_tl'])}")
+        return (f"{baslik} — son {len(pencere)} ayın gidişatı:\n\n" + "\n".join(satir) +
+                f"\n\nGenel: {donem_tr(pencere[0]['donem'])} → {donem_tr(son['donem'])} net "
+                f"{_fark(pencere[0]['net_tl'], son['net_tl'])}"), pencere
+
+    o = satirlar[i - 1]
+    ek = f"\n- Çalışan sayısı: {o['kisi']} → {son['kisi']}" if "kisi" in son else ""
+    return (f"{baslik}, {donem_tr(o['donem'])} → {donem_tr(son['donem'])}:\n\n"
+            f"- Net: {tl(o['net_tl'])} → {tl(son['net_tl'])}; {_fark(o['net_tl'], son['net_tl'])}\n"
+            f"- Brüt: {tl(o['brut_tl'])} → {tl(son['brut_tl'])}; {_fark(o['brut_tl'], son['brut_tl'])}{ek}"), [o, son]
+
+
+def _karsilastirma(s, secilen, toplamlar):
+    """Firma toplamı karşılaştırması (bkz. _karsilastir)."""
+    metin, kullanilan = _karsilastir(s, toplamlar, "Çalışanlara ödenen maaşlar", secilen[-1]["donem"])
+    return _sonuc(metin, [f"bordro:{r['donem']}" for r in kullanilan], kullanilan)
 
 
 def _maliyet_cevabi(firma_id, secilen):
@@ -472,6 +597,9 @@ def bordro_cevabi(soru, firma_id):
     # 2) Kıdem: en eski / en son işe giren çalışanlar
     if re.search(KIDEM, s) and not re.search(r"maaş|ücret|\bnet\b|brüt|öde", s):
         return _kidem_cevabi(s, firma_id)
+    # 2b) İşe alımlar ("son bir senede kaç kişi işe alındı", "bu yıl işe alınanlar kimler")
+    if re.search(ISE_ALIM, s):
+        return _ise_alim_cevabi(s, firma_id, calisanlar)
 
     # 3) Çalışan listesi (ödeme sorulmuyorsa); görev söylendiyse yalnız o görevdekiler
     if re.search(r"kimler|liste|isim|adları|kim var|görev|kim çalışıyor", s) and not re.search(ODEME, s):
@@ -504,7 +632,7 @@ def bordro_cevabi(soru, firma_id):
         return _esik_cevabi(s, esik, [r for r in satirlar if r["donem"] == aylar[-1]], aylar[-1])
     # 8) Karşılaştırma ("maaş giderleri geçen aya göre arttı mı")
     if re.search(KARSILASTIR, s):
-        return _karsilastirma(secilen, toplamlar)
+        return _karsilastirma(s, secilen, toplamlar)
 
     # 9) Kişi bazında liste / en yüksek-en düşük maaş (tek ay; birden çok ay istendiyse sonuncusu)
     if re.search(r"en (?:yüksek|çok|fazla|düşük|az)|liste|kime|her (?:bir )?(?:çalışan|personel|eleman)|"
