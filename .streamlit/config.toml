@@ -1,0 +1,7 @@
+# Uygulama yalnızca bu bilgisayardan erişilebilsin (demo şifreleri ortak; ağa/internete AÇMA)
+[server]
+address = "127.0.0.1"
+headless = true
+
+[browser]
+gatherUsageStats = false
