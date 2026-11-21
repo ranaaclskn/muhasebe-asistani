@@ -10,7 +10,7 @@ import re
 
 from langchain_ollama import ChatOllama
 
-from app.config import BUGUN, GECIKME_ZAMMI_AYLIK, LLM_MODEL, OLLAMA_URL
+from app.config import BUGUN, GECIKME_ZAMMI_AYLIK, GECIKME_ZAMMI_TARIH, LLM_MODEL, OLLAMA_URL
 from app.db import calistir, planli_islemler
 from app.dogrulama import lexical_score
 
@@ -228,6 +228,27 @@ def gecikme_zammi(tutar, gun, aylik_oran=None):
     return round(tutar * oran / 100 / 30 * max(gun, 0), 2)
 
 
+def gecikme_orani_cevabi(firma_id=None):
+    """'Gecikme zammı oranı nedir / nasıl hesaplanır?' -> config'teki resmî oran + yöntem + örnek.
+    Oran belgelerde yok; uydurulmaz, .env'deki GECIKME_ZAMMI_AYLIK kullanılır (rakamı Python hesaplar)."""
+    yuzde = lambda x: f"%{x:.4g}".replace(".", ",")  # noqa: E731  3.7 -> %3,7 ; 0.12333 -> %0,1233
+    gunluk = GECIKME_ZAMMI_AYLIK / 30
+    ornek = gecikme_zammi(10000, 30)
+    metin = (f"**Gecikme zammı oranı aylık {yuzde(GECIKME_ZAMMI_AYLIK)}** (6183 sayılı Kanun md. 51; "
+             f"{GECIKME_ZAMMI_TARIH} tarihinden beri geçerli). Vergi Usul Kanunu'ndaki gecikme faizi de aynı "
+             "orandadır.\n\n"
+             "**Nasıl hesaplanır:** Son ödeme tarihini izleyen günden ödeme gününe kadar her ay için aylık oran "
+             f"uygulanır; ay kesirlerinde günlük oran = aylık oran / 30 = **{yuzde(gunluk)}**.\n\n"
+             f"Örnek: 10.000 TL vergi borcu 30 gün gecikirse gecikme zammı {tl(ornek)} olur; ödenecek toplam "
+             f"{tl(10000 + ornek)}.\n\n"
+             "**SGK primleri:** Geciken prime gecikme cezası ve gecikme zammı birlikte uygulanır; tutarı SGK kendi "
+             "yöntemiyle hesaplar.\n\n"
+             "Oran Cumhurbaşkanı kararıyla değişebilir; güncelliğini muhasebecinize teyit ettirebilirsiniz. "
+             "Kendi geciken borcunuzun tutarı için “gecikmiş ödemelerimin faizi ne kadar?” diye sorabilirsiniz.")
+    return {"cevap": metin, "kaynaklar": [f"6183 md.51 (oran: {yuzde(GECIKME_ZAMMI_AYLIK)}/ay)"], "satirlar": [],
+            "yontem": "gecikme_orani"}
+
+
 def gecikme_faizi_cevabi(firma_id, ay=None):
     """'Gecikmiş ödemelerimin faizi ne kadar?' / 'faizleriyle toplam ödenecek tutar' -> gecikmiş borçlar,
     kaç gündür gecikmiş, BUGÜNE kadarki TAHMİNİ gecikme zammı ve toplam (hepsini Python hesaplar).
@@ -399,6 +420,8 @@ def cevapla_kayit(soru, firma_id, niyet):
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
         return tahmin_cevabi(firma_id, *parametreler)
+    if sorgu == "gecikme_orani":  # genel oran / hesaplama sorusu: config'teki resmî oran
+        return gecikme_orani_cevabi(firma_id)
     if sorgu == "gecikme_faizi":  # gecikmiş borç + tahmini gecikme zammı (oran config'ten)
         return gecikme_faizi_cevabi(firma_id, *parametreler)
     if sorgu == "aylik_gider":  # vergi + maaş + planlı: Python birleştirir

@@ -26,6 +26,7 @@ BUGUN = os.getenv("BUGUN") or date.today().isoformat()
 # Gecikme zammı (6183 s. Kanun md. 51): AYLIK yüzde. 13.11.2025'ten beri %3,7 (Cumhurbaşkanı Kararı).
 # Oran değişirse .env'e  GECIKME_ZAMMI_AYLIK=...  yazın. Ay kesirleri için günlük oran = aylık / 30.
 GECIKME_ZAMMI_AYLIK = float(os.getenv("GECIKME_ZAMMI_AYLIK", "3.7"))
+GECIKME_ZAMMI_TARIH = os.getenv("GECIKME_ZAMMI_TARIH", "13.11.2025")  # oranın yürürlük tarihi (cevapta yazılır)
 # Token tabanlı parçalama (atölye d5_02 ile aynı: cl100k_base, 200/40 token).
 # Türkçede ~2,1 karakter/token -> ≈420/84 karakter.
 TOKENIZER = "cl100k_base"

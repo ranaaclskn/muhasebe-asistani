@@ -29,6 +29,8 @@ def ortam(tmp_path, monkeypatch):
     shutil.copy(KOK / "data" / "muhasebe.db", kopya)
     monkeypatch.setattr(db, "DB_YOLU", kopya)
     monkeypatch.setattr(db, "_SEMA_GUNCEL", False)
+    # Kullanıcının arayüzden eklediği planlı kayıtlar testleri etkilemesin: kopyada temiz başla
+    db.baglan().execute("DELETE FROM planli_islemler").connection.commit()
     monkeypatch.setattr(akis, "niyet_belirle", modelsiz_niyet)
     monkeypatch.setattr(akis, "asistan", akis.akis_kur(tmp_path / "checkpoint.sqlite"))
 

@@ -195,6 +195,12 @@ def kural_duzelt(soru, sonuc):
     if re.search(r"ücret|maaş|bordro", s) and sonuc["niyet"] != "belge":
         return {"niyet": "belge", "sorgu": None, "parametreler": [],
                 "duzeltme": f"ücret/maaş -> belge (model: {sonuc['niyet']})"}
+    # "Gecikme zammı oranı nedir / nasıl hesaplanır?" -> oran BELGELERDE yok (RAG "bilmiyorum" diyordu);
+    # cevabı KOD verir: config'teki resmî oran + hesaplama yöntemi (kayit.gecikme_orani_cevabi).
+    # Kredi/banka faizi gibi konular buraya girmez: yalnızca GECİKME zammı/faizi/cezası.
+    if _gecikme_orani_kalibi(s):
+        return {"niyet": "kayit", "sorgu": "gecikme_orani", "parametreler": [],
+                "duzeltme": f"gecikme zammı oranı kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
     # "SGK primini geç ödersem ne olur?" varsayım/kural sorusudur, kişisel kayıt değil -> belge (SSS)
     if sonuc["niyet"] == "kayit" and re.search(r"ödersem|verirsem|ödemezsem|vermezsem|\bne olur\b|"
                                                r"(?:faiz|zam\w*|ceza\w*) oran|nasıl hesaplan", s):
@@ -372,6 +378,12 @@ def _son_n_ay(s):
     n = int(m.group(1)) if m.group(1).isdigit() else _SAYILAR[m.group(1)]
     bitis = _onceki_ay(BUGUN[:7])
     return (_ay_ekle(bitis, -(max(n, 1) - 1)), bitis)
+
+def _gecikme_orani_kalibi(s):
+    """Gecikme zammı/faizi ORANI ya da HESAPLAMA YÖNTEMİ mi soruluyor? ('kredi faizi oranı' değil)"""
+    return bool(re.search(r"gecikme (?:zamm|faiz|ceza)|geç ödeme faiz", s)
+                and re.search(r"oran|yüzde|kaç puan|nasıl hesaplan|hesaplama", s))
+
 
 def _faiz_kalibi(s):
     """KENDİ gecikmiş borcunun faizi / gecikme zammı mı soruluyor? ('ödersem ne olur' gibi kurallar değil)"""

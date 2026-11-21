@@ -415,9 +415,26 @@ def test_model_cevabinda_uydurma_kavram_reddedilir():
     assert cevap_dogrula("Gecikmiş ödemeniz 54.938,65 TL'dir.", veri, satir)["gecerli"]
 
 
-@pytest.mark.parametrize("soru", ["gecikme zammı oranı nedir", "SGK primini geç ödersem ne olur?"])
+@pytest.mark.parametrize("soru", ["SGK primini geç ödersem ne olur?", "kredi faiz oranı nedir"])
 def test_genel_faiz_sorulari_belgeye(soru):
     assert kural_duzelt(soru, {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []})["niyet"] == "belge"
+
+
+# --- "gecikme zammı oranı nedir": oran belgelerde yok, RAG "belgelerinizde yok" diyordu -> KOD cevaplar ---
+@pytest.mark.parametrize("soru", ["gecikme zammı oranı nedir", "gecikme faizi yüzde kaç",
+                                  "gecikme zammı nasıl hesaplanır"])
+@pytest.mark.parametrize("model_niyeti", ["kayit", "belge"])
+def test_gecikme_orani_sorusu_koda_gider(soru, model_niyeti):
+    n = kural_duzelt(soru, {"niyet": model_niyeti, "sorgu": None, "parametreler": []})
+    assert (n["niyet"], n["sorgu"]) == ("kayit", "gecikme_orani")
+
+
+def test_gecikme_orani_cevabi():
+    r = cevapla_kayit("gecikme zammı oranı nedir", "F001", {"sorgu": "gecikme_orani", "parametreler": []})
+    c = r["cevap"]
+    assert "aylık %3,7" in c and "13.11.2025" in c and "%0,1233" in c
+    assert "370,00 TL" in c and "10.370,00 TL" in c  # 10.000 TL × %3,7 × 1 ay
+    assert "SGK" in c and r["yontem"] == "gecikme_orani"
 
 
 # --- "bir şoföre verilecek maaş": tekil + gelecek zaman (iki kişinin listesi ve Ekim geliyordu) ---
