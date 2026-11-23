@@ -56,7 +56,12 @@ class Durum(TypedDict, total=False):
     bitti: bool            # özet aşamasında iş bitti mi (ör. belge bulunamadı / iptal)
 
 
+# Onay sorusundaki talep özetinin öneki; talep kuyruğa yazılırken bu önek silinir (tek yerde tanımlı).
+TALEP_ONEKI = "Muhasebeci onayına gidecek talep: "
+
+
 # 2) DÜĞÜMLER
+
 def niyet_dugumu(d: Durum):
     baska = baska_firma_adi(d["soru"], d["firma_id"])
     if baska:  # başka firma adı geçiyorsa modele hiç sormadan reddet (T12)
@@ -156,7 +161,7 @@ def ozetle(d: Durum):
     if emir == "planli_ekle":
         ne = "ödeme yapılacak" if alanlar["yon"] == "Gider" else "tahsilat bekleniyor"
         alanlar.setdefault("aciklama", d["soru"][:200])
-        ozet = f"📝 Planlı kayıt: **{tarih_tr(alanlar['tarih'])} · {tl(alanlar['tutar_tl'])} {ne} · “{alanlar['aciklama']}”**"
+        ozet = f"Planlı kayıt: **{tarih_tr(alanlar['tarih'])} · {tl(alanlar['tutar_tl'])} {ne} · “{alanlar['aciklama']}”**"
     elif emir == "belge_gonder":
         belge = belge_bul(firma_id, alanlar["belge_turu"], alanlar["donem"])
         if not belge:
@@ -164,12 +169,12 @@ def ozetle(d: Durum):
                                             "eder misiniz?", "kaynaklar": [], "arac": "talep_eksik"}
         eposta = kayitli_eposta(firma_id)  # metindeki adres DEĞİL, kayıtlı adres
         alanlar.update(dosya=belge["dosya_adi"], donem=belge["donem"], eposta=eposta)
-        ozet = (f"📨 Muhasebeci onayına gidecek talep: **{donem_tr(belge['donem'])} {belge['tur']} "
+        ozet = (f"{TALEP_ONEKI}**{donem_tr(belge['donem'])} {belge['tur']} "
                 f"({belge['dosya_adi']})** kayıtlı e-posta adresinize ({eposta}) gönderilecek.")
         if "@" in d["soru"]:
             ozet += " Güvenlik nedeniyle belgeler yalnızca kayıtlı adresinize gönderilir."
     else:  # gorusme_talebi
-        ozet = f"📨 Muhasebeci onayına gidecek talep: **Görüşme talebi** “{alanlar.get('konu', d['soru'])}”"
+        ozet = f"{TALEP_ONEKI}**Görüşme talebi** “{alanlar.get('konu', d['soru'])}”"
     return {"alanlar": alanlar, "ozet": ozet}
 
 
@@ -193,11 +198,12 @@ def uygula(d: Durum):
             no = planli_islem_ekle(firma_id, d.get("kullanici_id"), a["yon"], a["tarih"], a["tutar_tl"], a["aciklama"])
         except ValueError as e:
             return {"cevap": f"Kaydedilemedi: {e}", "kaynaklar": [], "arac": "iptal"}
-        return {"cevap": f"✅ Kaydedildi (#{no}). “📅 Planlı ödeme ve tahsilatlarım” bölümünde görebilirsiniz.",
+        return {"cevap": f"Kaydedildi (#{no}). Panelin altındaki “Planlı ödeme ve tahsilatlar” sekmesinde "
+                          "görebilirsiniz.",
                 "kaynaklar": [f"plan#{no}"], "arac": "kayit"}
-    ozet = d["ozet"].replace("**", "").replace("📨 Muhasebeci onayına gidecek talep: ", "")
+    ozet = d["ozet"].replace("**", "").replace(TALEP_ONEKI, "")  # muhasebeci kuyruğunda yalnız özet
     talep_id = talep_ekle(firma_id, d["soru"], emir=emir, detay=a, ozet=ozet)
-    return {"cevap": f"📨 Talebiniz muhasebecinize iletildi (talep no: {talep_id}). Muhasebeciniz onayladıktan "
+    return {"cevap": f"Talebiniz muhasebecinize iletildi (talep no: {talep_id}). Muhasebeciniz onayladıktan "
                      f"sonra işlem yapılacak. Durumunu “{talep_id} numaralı talebim ne durumda?” diye sorabilirsiniz.",
             "kaynaklar": [f"talep:{talep_id}"], "arac": "talep"}
 

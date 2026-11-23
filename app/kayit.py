@@ -15,7 +15,7 @@ from app.db import calistir, planli_islemler
 from app.dogrulama import lexical_score
 
 CEKIMSER = "Bu bilgi kayıtlarınızda yok, muhasebecinize iletebilirim."
-_EKLE = " Firma panelindeki “📅 Planlı ödeme ve tahsilatlarım” bölümünden ekleyebilirsiniz."
+_EKLE = " Panelin altındaki “Planlı ödeme ve tahsilatlar” sekmesinden ekleyebilirsiniz."
 # Sonuç boşsa "bilgi yok" yerine söylenecek ANLAMLI cevap (boş sonuç da bilgidir):
 BOS_SONUC = {
     "gecikmis": "Kayıtlarınıza göre gecikmiş ödemeniz yok.",
