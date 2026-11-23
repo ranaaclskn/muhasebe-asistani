@@ -45,9 +45,10 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
   - **Cari hesaplar:** müşteri ve satıcı bazında toplam, pay (çubukla), fatura sayısı, ortalama fatura, ilk/son işlem; seçilen cari için **cari hesap ekstresi** (yürüyen toplamla). Tek müşteri %35'i geçerse uyarı.
   - **Finansal sağlık:** 0–100 **demo sağlık puanı** (zamanında ödeme 25, nakit kârlılığı 25, gecikme 20, müşteri dağılımı 15, nakit dayanıklılığı 15; her bileşen ve formülü ekranda) ve göstergeler: net nakit marjı, gelir büyümesi, personel gider oranı, vergi yükü, zamanında ödeme oranı, nakit dayanıklılığı (birikmiş nakit kaç aylık gideri karşılıyor). Resmî bir derecelendirme değildir.
   - **Senaryo ("ne olur?"):** satış (%), satıcı maliyeti (%) ve personel sayısı (kişi) kaydırıcılarıyla 3/6/12 aylık birikmiş nakit projeksiyonu; mevcut gidişat ile senaryo aynı grafikte. Taban son 3 tamamlanmış ayın ortalaması; varsayımlar ekranda yazılı.
+  - **Aylık rapor (PDF):** seçilen tamamlanmış ay için iki sayfalık yönetici raporu: ayın tahsilat/ödeme/neti (önceki aya göre değişim), dikkat edilmesi gerekenler, son 6 ay gelir–gider grafiği, ayın kalem dağılımı, en büyük 5 müşteri ve satıcı, 6 aylık nakit akış tablosu, finansal sağlık puanı ve bileşenleri, geciken ve 30 gün içinde ödenecekler. Rakamlar paneldeki fonksiyonlardan gelir (`app/rapor.py`, testle karşılaştırılır); model rakam üretmez. Geçen ayın raporu yan menüden tek tıkla da indirilir.
   - **Diğer sekmeler:** yükümlülükler (üstte ödenmemiş borçların **yaşlandırması**: vadesi gelmemiş / 1–30 / 31–60 / 60+ gün gecikmiş; tablo durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
   - Nakit akış tablosu ve gelir–gider grafiği aynı kaynakları kullanır; ay ay netleri birebir aynıdır (testle kontrol edilir).
-- **Muhasebeci paneli:** **tüm firmaların vergi takvimi** (ay takviminde firma adıyla) ve **yaşlandırma tablosu** (firma × gecikme kovası), **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
+- **Muhasebeci paneli:** **tüm firmaların vergi takvimi** (ay takviminde firma adıyla) ve **yaşlandırma tablosu** (firma × gecikme kovası), **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti; altında herhangi bir firmanın **aylık PDF raporu**), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
 
 Kullanıcının eklediği kayıtlar muhasebecinin resmî kayıtlarından (`yukumlulukler`) **ayrı** tutulur; "bu ay ne kadar vergi ödeyeceğim" sorusu yalnız resmî kayıtlardan cevaplanır.
 
@@ -91,7 +92,7 @@ HATIRLATMA (scripts/05_hatirlatma.py → n8n)
 | Vektör DB | ChromaDB (`data/chroma`, koleksiyon `muhasebe`) |
 | LLM kütüphaneleri | `langchain-ollama`, `langchain-chroma`, `langchain-text-splitters`, `langchain-core` |
 | Agent | LangGraph (`StateGraph`) |
-| Arayüz | Streamlit (grafik: Altair; Excel raporu: openpyxl) |
+| Arayüz | Streamlit (grafik: Altair; Excel raporu: openpyxl; PDF raporu: fpdf2) |
 | Parola | bcrypt |
 | Otomasyon | n8n 2.x (onay e-postası ve ödeme hatırlatması; webhook → Send Email) |
 
@@ -197,6 +198,20 @@ python scripts/05_hatirlatma.py          # her firmaya, gecikmiş + 3 gün için
 
 **Bellek:** Proje 6 GB RAM'li bir makinede geliştirildi. n8n belleği doldurunca sistem başka programları kapatabildiği için `kur.sh` ve `baslat.sh`, `systemd-run` varsa n8n'i bellek sınırlı bir "kafeste" çalıştırır (varsayılan 900 MB; `N8N_BELLEK=1200M bash n8n/baslat.sh` ile değiştirilir). Sınır aşılırsa yalnızca n8n durur. Gerekirse önce tarayıcı sekmelerini ve fazladan açık Streamlit pencerelerini kapatın.
 
+### Aylık yönetici raporu (PDF)
+
+Arayüzde **Aylık rapor** sekmesinden (muhasebeci: firma portföyünün altından) indirilir. Tüm firmalar için toplu üretmek:
+
+```bash
+python scripts/06_aylik_rapor.py                 # geçen ay, tüm firmalar -> data/raporlar/
+```
+
+```bash
+python scripts/06_aylik_rapor.py --ay 2026-09 --firma F001
+```
+
+PDF `fpdf2` ile üretilir; Türkçe karakterler için DejaVu Sans yazı tipi `app/fonts/` klasöründedir (serbest lisans, `LICENSE-DejaVu.txt`).
+
 ### Arayüzü başlat
 
 ```bash
@@ -244,7 +259,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 208 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 218 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -266,7 +281,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 208/208 |
+| Birim testleri (`pytest`) | 218/218 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -289,6 +304,8 @@ muhasebe-asistani/
 │   ├── bildirim.py      # n8n köprüsü: onay e-postası (kuyruk, tekrar deneme), ödeme hatırlatması
 │   ├── nakit.py         # hareket dökümü ve nakit akış tablosu (kod planı, kod × ay matrisi, devir, kümülatif)
 │   ├── analiz.py        # uyarılar, ödeme takvimi, yaşlandırma, cari hesap/ekstre, finansal sağlık puanı, senaryo
+│   ├── rapor.py         # aylık yönetici raporu: veriyi toplar (rapor_verisi) ve PDF'e yazar (rapor_pdf, fpdf2)
+│   ├── fonts/           # DejaVu Sans (PDF'te Türkçe karakterler için)
 │   ├── analiz_sorulari.py # bu analizleri sohbetten sorulabilir yapar: soru kalıbı + kodla üretilen cevap
 │   ├── rag.py           # Chroma arama → rerank → JSON cevap → kanıt eşleştirme
 │   ├── dogrulama.py     # lexical rerank, dönem çıkarımı, kanıt/atıf doğrulama
@@ -302,6 +319,7 @@ muhasebe-asistani/
 │   ├── 02_belge_uret.py
 │   ├── 03_indeksle.py
 │   ├── 05_hatirlatma.py # ödeme hatırlatma e-postaları (n8n)
+│   ├── 06_aylik_rapor.py # tüm firmaların aylık PDF raporu (data/raporlar/)
 │   ├── test_posta_kutusu.py  # yerel test SMTP sunucusu (127.0.0.1:1025)
 │   ├── soru_dene.py     # geliştirici için adım adım deneme aracı
 │   ├── konsol_asistan.py, veri_goruntule.py   # terminalden sohbet ve veri görüntüleme
@@ -365,7 +383,8 @@ muhasebe-asistani/
 - [x] Nakit akış tablosu ve hareket dökümü (Excel indirme), muhasebeci firma portföyü
 - [x] Uyarılar, ödeme takvimi, cari hesaplar, yaşlandırma, finansal sağlık puanı, senaryo simülatörü
 - [x] Asistan analizlere bağlandı: sağlık puanı, cari, senaryo ve uyarı soruları sohbetten cevaplanır
-- [x] pytest birim testleri (208 test)
+- [x] Aylık yönetici raporu (PDF): firma panelinden, muhasebeci portföyünden ve komut satırından
+- [x] pytest birim testleri (218 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)

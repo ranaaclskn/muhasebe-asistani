@@ -6,3 +6,4 @@ data/sonuclar.csv
 __pycache__/
 data/langgraph_checkpoint.sqlite*
 data/posta_kutusu/
+data/raporlar/

@@ -24,6 +24,7 @@ from app.onay import onay_ver, son_denetim, talep_gonder  # noqa: E402
 from app.analiz import (cari_ekstre, cari_ozet, gostergeler, senaryo, takvim_olaylari, uyarilar,  # noqa: E402
                         yaslandirma)
 from app.nakit import DURUMLAR, KODLAR, donem_aylari, hareketler, nakit_akis_tablosu  # noqa: E402
+from app.rapor import dosya_adi, rapor_pdf, secilebilir_aylar, varsayilan_ay  # noqa: E402
 from ui.analiz_gorunum import (ANALIZ_CSS, ay_adi, cari_html, saglik_html, senaryo_grafigi,  # noqa: E402
                                takvim_html, uyarilar_html, yaslandirma_html, yaslandirma_tablo_html)
 from ui.grafik import PENCERELER, aylik_tablo, gider_dagilimi, grafik, kisa_tl  # noqa: E402
@@ -560,6 +561,35 @@ def senaryo_bolumu(firma_id):
 
 
 # ---------- 2) FİRMA PANELİ ----------
+# ---------- 2f) AYLIK YÖNETİCİ RAPORU (PDF) ----------
+def rapor_dugmesi(firma_id, ay, anahtar, etiket="PDF raporu indir", tip="secondary"):
+    """PDF tıklanınca üretilir (callable): her sayfa yenilemesinde boşuna hesaplanmaz. Rakamlar app/rapor.py'de
+    panelle aynı fonksiyonlardan gelir."""
+    st.download_button(etiket, lambda: rapor_pdf(firma_id, ay), file_name=dosya_adi(firma_id, ay),
+                       mime="application/pdf", icon=":material/picture_as_pdf:", key=anahtar, type=tip,
+                       width="stretch")
+
+
+def rapor_bolumu(firma_id):
+    c1, c2, _ = st.columns([1.2, 1.2, 2], vertical_alignment="bottom")
+    ay = c1.selectbox("Rapor ayı", secilebilir_aylar(), format_func=donem_tr, key="rapor_ayi")
+    with c2:
+        rapor_dugmesi(firma_id, ay, "rapor_indir", "PDF indir", tip="primary")
+    st.caption(f"{donem_tr(ay)} için iki sayfalık yönetici özeti. Rakamlar paneldekiyle aynı fonksiyonlardan "
+               "hesaplanır; yapay zekâ modeli rakam üretmez.")
+    html('<div class="bolum-etiket">Raporun içeriği</div>')
+    st.markdown(f"""
+- **{donem_tr(ay)} özeti:** tahsilat, ödeme ve net; önceki aya göre değişim
+- **Dikkat edilmesi gerekenler:** gecikmiş ve yaklaşan ödemeler, müşteri yoğunlaşması
+- **Son 6 ay gelir–gider grafiği** ve ayın kalem dağılımı
+- **En büyük 5 müşteri ve satıcı**
+- **Nakit akış tablosu** (6 ay, kümülatif)
+- **Finansal sağlık puanı** ve bileşenleri
+- **Geciken ve 30 gün içinde ödenecekler**
+
+Uyarılar, sağlık puanı ve ödemeler rapor tarihindeki ({tarih_tr(BUGUN)}) güncel durumu gösterir.""")
+
+
 def firma_paneli(k):
     firma_id = k["firma_id"]  # Kural 2: firma_id OTURUMDAN; kullanıcı değiştiremez
     firma = firma_bilgisi(firma_id)
@@ -609,10 +639,11 @@ def firma_paneli(k):
     st.write("")
     with st.container(key="alt_kart"):
         liste = hareketler(firma_id)
-        t0, th, tk, tc, ts, tn, t1, t2, t3 = st.tabs([
+        t0, th, tk, tc, ts, tn, tr, t1, t2, t3 = st.tabs([
             ":material/table_chart: Nakit akış", ":material/list_alt: Hareketler",
             ":material/calendar_month: Ödeme takvimi", ":material/groups: Cari hesaplar",
             ":material/monitor_heart: Finansal sağlık", ":material/tune: Senaryo",
+            ":material/picture_as_pdf: Aylık rapor",
             ":material/receipt_long: Yükümlülükler", ":material/event: Planlı kayıtlar",
             ":material/outgoing_mail: Talepler"])
         with t0:
@@ -627,6 +658,8 @@ def firma_paneli(k):
             saglik_bolumu(firma_id)
         with tn:
             senaryo_bolumu(firma_id)
+        with tr:
+            rapor_bolumu(firma_id)
         with t1:
             html('<div class="bolum-etiket">Ödenmemiş vergi ve prim borçlarının yaşlandırması</div>')
             html(yaslandirma_html(yaslandirma(firma_id)))
@@ -737,6 +770,13 @@ def firma_portfoyu(talepler):
         html(portfoy_html(satirlar))
         st.caption("Net (son 3 ay): gelir − gider (satış/alış faturaları, net maaş, vergi/prim, planlı kayıtlar). "
                    "Durum: gecikmiş ödeme varsa kırmızı, 7 gün içinde son tarih varsa sarı.")
+        fids = firmalar()
+        c1, c2, c3 = st.columns([1.6, 1, 1], vertical_alignment="bottom")
+        fid = c1.selectbox("Aylık yönetici raporu", fids, key="muh_rapor_firma",
+                           format_func=lambda f: firma_bilgisi(f).get("unvan", f))
+        ay = c2.selectbox("Rapor ayı", secilebilir_aylar(), format_func=donem_tr, key="muh_rapor_ayi")
+        with c3:
+            rapor_dugmesi(fid, ay, "muh_rapor_indir", "PDF indir")
 
 
 def muhasebeci_paneli(k):
@@ -826,6 +866,8 @@ def yan_menu(k):
             html('<div class="yan-bolum">Firma</div>' + "".join(
                 f'<div class="yan-satir"><span class="s">{a}</span><span class="d">{escape(str(d))}</span></div>'
                 for a, d in satir if d))
+            html('<div class="yan-bolum">Rapor</div>')
+            rapor_dugmesi(k["firma_id"], varsayilan_ay(), "yan_rapor", f"{donem_tr(varsayilan_ay())} raporu (PDF)")
         html('<div class="yan-bolum">Oturum</div>')
         if st.button("Çıkış yap", icon=":material/logout:", width="stretch"):
             st.session_state.clear()
