@@ -127,11 +127,11 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
     if sorgu == "siradaki_tur":
         s = satirlar[0]
         if s["durum"] == "Gecikti":
-            return (f"{s['tur']} ({donem_tr(s['donem'])} dönemi, {tl(s['tutar_tl'])}) için son ödeme tarihi "
+            return (f"**Ödenmedi.** {s['tur']} ({donem_tr(s['donem'])} dönemi, {tl(s['tutar_tl'])}) için son ödeme tarihi "
                     f"**{tarih_tr(s['son_odeme_tarihi'])}** idi; bu tarih geçti, gecikme zammı işliyor. "
                     f"Tutarı için “gecikmiş ödemelerimin faizi ne kadar?” diye sorabilirsiniz.")
-        return (f"{s['tur']} ({donem_tr(s['donem'])} dönemi) için en geç **{tarih_tr(s['son_odeme_tarihi'])}** "
-                f"tarihinde ödemelisiniz; tutar {tl(s['tutar_tl'])}.")
+        return (f"Henüz ödenmedi: {s['tur']} ({donem_tr(s['donem'])} dönemi) için en geç "
+                f"**{tarih_tr(s['son_odeme_tarihi'])}** tarihinde ödemelisiniz; tutar {tl(s['tutar_tl'])}.")
     if sorgu == "en_yakin":
         s = satirlar[0]
         return (f"En yakın ödeme: {s['tur']} ({donem_tr(s['donem'])}), {tl(s['tutar_tl'])}, "
@@ -455,12 +455,47 @@ def aylik_gider_cevabi(firma_id, ay):
     return {"cevap": metin, "kaynaklar": kaynaklar, "satirlar": [], "yontem": "aylik_gider"}
 
 
+def gun_icinde_cevabi(firma_id, bas, bit, etiket):
+    """'Bu hafta / önümüzdeki 7 günde ödemem var mı' -> o tarih aralığında son günü olan ÖDENMEMİŞ vergi/prim
+    ve kullanıcının planladığı ödemeler. (Aralığı niyet.gun_araligi KODLA hesaplar.)"""
+    from app.db import planli_islemler, yukumlulukler
+    yuk = [s for s in yukumlulukler(firma_id) if s["durum"] != "Ödendi" and bas <= s["son_odeme_tarihi"] <= bit]
+    plan = [p for p in planli_islemler(firma_id) if p["yon"] == "Gider" and bas <= p["tarih"] <= bit]
+    aralik = f"{tarih_tr(bas)} – {tarih_tr(bit)}"
+    if not yuk and not plan:
+        return {"cevap": f"{etiket.capitalize()} ({aralik}) son günü gelen ödenmemiş vergi/prim ya da planlı "
+                          "ödemeniz yok.", "kaynaklar": [], "satirlar": [], "yontem": "sablon"}
+    yuk.sort(key=lambda s: s["son_odeme_tarihi"])
+    toplam = round(sum(s["tutar_tl"] for s in yuk) + sum(p["tutar_tl"] for p in plan), 2)
+    metin = (f"{etiket.capitalize()} ({aralik}) {len(yuk) + len(plan)} ödemeniz var, toplam **{tl(toplam)}**:\n\n"
+             + "\n".join(satir_metni(s) for s in yuk + plan))
+    return {"cevap": metin, "kaynaklar": [s["id"] for s in yuk] + [f"plan#{p['id']}" for p in plan],
+            "satirlar": yuk + plan, "yontem": "sablon"}
+
+
 def cevapla_kayit(soru, firma_id, niyet):
+    """Kayıt sorusunu cevapla (asıl iş _cevapla_kayit'te). Beklenen tahsilat sorusunda kullanıcının elle eklediği
+    planlı tahsilatların yanında TAHSİL EDİLMEMİŞ SATIŞ FATURALARI da söylenir: yalnız planlıyı söylemek, faturadan
+    bekleyen asıl alacağı gizleyip yanıltıyordu (değerlendirmede bulundu)."""
+    sonuc = _cevapla_kayit(soru, firma_id, niyet)
+    if niyet.get("sorgu") == "beklenen_tahsilatlar":
+        from app.alacak import ozet
+        o = ozet(firma_id)
+        if o["acik_adet"]:
+            gec = (f", vadesi geçen {tl(o['vadesi_gecen_tutar'])}" if o["vadesi_gecen_adet"] else "")
+            sonuc = {**sonuc, "cevap": sonuc["cevap"] + f"\n\nAyrıca tahsil edilmemiş **{o['acik_adet']} satış faturanız** "
+                     f"var: **{tl(o['acik_tutar'])}**{gec}. Ayrıntı: panelin **Alacaklar** sekmesi."}
+    return sonuc
+
+
+def _cevapla_kayit(soru, firma_id, niyet):
     """niyet: niyet_belirle() çıktısı ({'sorgu', 'parametreler'}).
     Döner: {"cevap", "kaynaklar" (kayıt id'leri), "satirlar", "yontem": model|sablon|cekimser}"""
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
         return tahmin_cevabi(firma_id, *parametreler)
+    if sorgu == "gun_icinde":  # 'bu hafta / önümüzdeki 7 gün' -> aralık KODLA (niyet.gun_araligi)
+        return gun_icinde_cevabi(firma_id, *parametreler)
     if sorgu in ("saglik", "cari", "senaryo", "uyarilar", "alacak"):  # panel analizleri (döngüsel import olmasın diye burada)
         from app.analiz_sorulari import analiz_cevabi
         return analiz_cevabi(soru, firma_id, sorgu, parametreler)

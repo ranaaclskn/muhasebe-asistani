@@ -115,7 +115,7 @@ def takvim_kalibi(soru):
     'ne zaman ödedim / ödendi mi' gibi kişisel kayıt soruları değil."""
     s = soru.replace("İ", "i").replace("I", "ı").lower()
     zaman = re.search(r"ne zaman|kaçında|kaçına kadar|hangi gün|son gün|en geç|son tarih", s)
-    kural = re.search(r"ödenir|verilir|ödenmeli|ödenmesi|verilmeli|verilmesi|yatırıl|beyan edilir", s)
+    kural = re.search(r"ödenir|verilir|ödenmeli|ödenmesi|verilmeli|verilmesi|yatırıl|beyan edilir|yapılır|yapılmalı", s)
     return bool(zaman and kural and not re.search(r"ödedim|ödendi|ödemiş", s))
 
 
@@ -141,6 +141,12 @@ def takvim_cevabi(soru):
 # ---------- Beyanname tutar soruları: firmanın o ayki beyannamesinden AYNEN satır ----------
 # "Temmuz muhtasar beyannamesinde ne kadar bildirildi?" — aynı belgede Muhtasar, SGK ve ücret rakamları
 # yan yana; küçük model bazen yanlış satırı (SGK) seçiyordu. Tür + ay belliyse satırı KOD bulur.
+# Soruda belirli bir SATIR soruluyorsa ("hesaplanan KDV", "matrah") varsayılan "ödenecek" satırı yerine o satır:
+# soru kelimesi -> beyannamede aranacak ifade (küçük harf). (Değerlendirmede "hesaplanan KDV" sorusuna "ödenecek" geliyordu.)
+_OZEL_SATIRLAR = [("hesaplanan", "hesaplanan kdv"), ("indirilecek", "indirilecek kdv"), ("matrah", "matrah"),
+                  ("prime esas", "prime esas kazanç"), ("damga", "damga vergisi kesintisi"),
+                  ("işsizlik", "işsizlik sigortası"), ("işçi payı", "sgk işçi payı"),
+                  ("çalışan sayısı", "çalışan sayısı"), ("kaç çalışan", "çalışan sayısı")]
 _BEYAN_SATIRLARI = {  # tür -> (dosya türü, aranacak satır başları)
     "Muhtasar": ("MUHSGK", ["Muhtasar (gelir vergisi stopajı) ödenecek tutar", "Muhtasar son ödeme tarihi"]),
     "SGK primi": ("MUHSGK", ["SGK primi ödenecek tutar", "SGK primi son ödeme tarihi"]),
@@ -171,7 +177,20 @@ def beyanname_satiri(soru, firma_id):
         if not yol.exists():
             return None  # o döneme ait beyanname yok -> normal akış (çekimser kalır)
         metin = yol.read_text(encoding="utf-8").splitlines()
-        satirlar += [next(x for x in metin if x.startswith(b)) for b in baslar if any(x.startswith(b) for x in metin)]
+        ozel = [ifade for kelime, ifade in _OZEL_SATIRLAR if kelime in s]
+        if ozel:  # istenen satır(lar); bulunamazsa normal akışa bırak (model belgeden arar)
+            temiz = [x.strip("- ").strip() for x in metin]
+            kucuk = [x.replace("İ", "i").lower() for x in temiz]
+            # önce o ifadeyle BAŞLAYAN ve tutar içeren satır; yoksa ifadeyi içeren tutarlı satır (başlık/formül değil)
+            bulunan = ([t for t, k in zip(temiz, kucuk) if any(k.startswith(i) for i in ozel) and re.search(r"\d,\d\d", t)]
+                       or [t for t, k in zip(temiz, kucuk) if any(i in k for i in ozel) and re.search(r"\d,\d\d", t)
+                           and "=" not in t])
+            if not bulunan:
+                return None
+            satirlar += list(dict.fromkeys(bulunan))
+        else:
+            satirlar += [next(x for x in metin if x.startswith(b)) for b in baslar
+                         if any(x.startswith(b) for x in metin)]
         kaynak = kaynak or dosya
     if not satirlar or len({_BEYAN_SATIRLARI[t][0] for t in turler}) > 1:
         return None  # farklı beyannameler (KDV + muhtasar) birlikte: tek kaynağa sığmaz, modele bırak
@@ -203,6 +222,28 @@ YANILTICI = re.compile(r"ödemeyebilir|ödemenize gerek|ödemek zorunda değil|v
                        r"gerek yok|ödemeyin|vermeyebilir|ceza(sı)? (yok|uygulanmaz)", re.I)
 
 
+# ---------- Kavram soruları: "KDV beyannamesi nedir", "muhtasar ne demek" -> rehberdeki tanım aynen ----------
+# (Değerlendirmede "KDV beyannamesi nedir?" SSS'deki geç verme cezası cevabına takılıyordu.)
+REHBER = "kdv_muhtasar_sgk_rehberi.txt"
+_KAVRAMLAR = [(r"geçici vergi", "Geçici vergi:"), (r"muhtasar|muhsgk|stopaj", "Muhtasar beyanname:"),
+              (r"\bsgk|sigorta prim", "SGK primi:"), (r"\bkdv|katma değer", "KDV (Katma Değer Vergisi):")]
+
+
+def kavram_cevabi(soru):
+    s = soru.replace("İ", "i").replace("I", "ı").lower()
+    if not re.search(r"\bnedir\b|ne demek|ne anlama gel|neyi ifade|tanımı|açıklar mısın|anlatır mısın|nedir\?", s):
+        return None
+    if re.search(r"\d|benim|ödedi|ödeme(?:m|miz)|tutar|ne kadar|son gün|ne zaman|\bgeç\b|gecik", s):
+        return None  # kişisel kayıt / tarih / ceza soruları başka yollarda
+    paragraflar = (BELGE_DIR / REHBER).read_text(encoding="utf-8").split("\n\n")
+    for desen, bas in _KAVRAMLAR:  # 'geçici vergi' 'kdv'den önce aranır (özel olan önce)
+        if re.search(desen, s):
+            p = next((x for x in paragraflar if x.strip().startswith(bas)), None)
+            if p:
+                return f"{' '.join(p.split())} [kaynak: {REHBER}]"
+    return None
+
+
 def cevapla_belge(soru, firma_id):
     """retrieve -> rerank -> generate (JSON) -> kanıt eşleştirme -> atıf doğrulama.
     Döner: {"cevap" ('... [kaynak: x.txt]'), "kaynaklar" (getirilen), "atif", "kanit", "parcalar"}"""
@@ -210,6 +251,10 @@ def cevapla_belge(soru, firma_id):
     if takvim:  # genel son tarih kuralı: ORTAK takvimden aynen (firma filtresi gerekmez, herkes görür)
         return {"cevap": takvim, "kaynaklar": [TAKVIM], "atif": validate_citations(takvim, [TAKVIM]),
                 "kanit": {"kaynak": TAKVIM}, "parcalar": []}
+    kavram = kavram_cevabi(soru)
+    if kavram:  # tanım sorusu: rehberdeki paragraf aynen
+        return {"cevap": kavram, "kaynaklar": [REHBER], "atif": validate_citations(kavram, [REHBER]),
+                "kanit": {"kaynak": REHBER}, "parcalar": []}
     sss = sss_cevabi(soru)
     if sss:  # SSS'de karşılığı olan soru: belgedeki cevap aynen
         return {"cevap": sss, "kaynaklar": [SSS], "atif": validate_citations(sss, [SSS]),

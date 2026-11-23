@@ -18,10 +18,18 @@ KOSUL = (r"\w+(?:ırsa|irse|ursa|ürse|arsa|erse)\w*|\w+(?:sam|sem|sak|sek)\b|\b
          r"\bne olur\b|varsay")
 DEGISKEN = r"satış|ciro|gelir|hasılat|maliyet|alış|tedarik|hammadde|satıcı|personel|çalışan|eleman|işçi|kişi"
 ALACAK_KALIBI = (r"vadesi (?:geç|dol)\w* (?:alacak|fatura|tahsilat)|(?:alacak|fatura)\w* vadesi (?:geç|dol)|"
-                 r"tahsil edilme(?:miş|yen)|tahsil edeme|açık (?:fatura|alacak)|ödenmemiş satış|"
+                 r"tahsil edilme(?:miş|yen|di)|tahsil edeme|tahsil olma|açık (?:fatura|alacak)|ödenmemiş satış|"
+                 r"(?:ödenmemiş|ödenmeyen|parası gelmeyen) fatura|parasını (?:almadı|alamadı)|ödemesini (?:almadı|alamadı)|"
                  r"kim(?:ler)? borçlu|borçlu (?:müşteri|olan)|bana borcu|borcu olan müşteri|"
-                 r"alacak yaşlandır|alacak devir|ortalama tahsil|tahsil süre|tahsilat süre")
-MUSTERI_ODEME = r"kaç günde|ne kadar sürede|geç öd|zamanında öd|ödemiyor|ödemeyen|ödemedi|borçlu|borcu"
+                 r"alacak yaşlandır|alacak devir|ortalama tahsil|tahsil süre|tahsilat süre|"
+                 r"kaç gün\w*\s+(?:içinde\s+)?tahsil|tahsil\w*\s+(?:\w+\s+)?kaç gün|ortalama\s+(?:\w+\s+){0,2}tahsil|"
+                 # 'Ege Otel bize ne kadar borçlu': üçüncü kişi BORÇLU = bizim alacağımız ('borçluyum/kime borçlu' bizim borcumuz)
+                 r"\b(?:bize|bana)\b.*\bborç|\bborçlu\b(?!.*\bkime\b)|"
+                 # "Moda Butik'in borcu": kesme işaretli tamlayan + borcu = üçüncü kişinin bize borcu
+                 r"\w+['’](?:n?[ıiuü]n) borc")
+MUSTERI_ODEME = r"kaç günde|ne kadar sürede|geç öd|zamanında öd|ödemiyor|ödemeyen|ödemedi|borçlu|borcu|gecik"
+# "Moda Butik'ten ne kadar alacağım var?": -den/-dan + alacak, TUTAR YOK (tutar varsa planlı tahsilat kaydıdır)
+KISIDEN_ALACAK = r"\w+'?(?:ten|tan|den|dan)\s+(?:\w+\s+){0,2}(?:alacağ|alaca[kğ]ım|alacak)"
 
 
 def _kucuk(metin):
@@ -39,16 +47,22 @@ def analiz_kalibi(soru):
     if re.search(KOSUL, s) and re.search(DEGISKEN, s) and not re.search(r"ödersem|ödemezsem|verirsem|vermezsem", s):
         return {"niyet": "kayit", "sorgu": "senaryo", "parametreler": [], "duzeltme": "senaryo kalıbı"}
     # FİNANSAL SAĞLIK: puan / genel durum
-    if re.search(r"(?:finansal|mali)\s+(?:sağlık|durum)|sağlık puan|puanım|puanı\b|skor|nasıl gidiyor|"
-                 r"genel durum|şirketimin durumu|işletmemin durumu|firmamın durumu", s):
+    if re.search(r"(?:finansal|mali)\s+(?:sağl[ıi][kğ]|durum)|sağlık puan|puanım|puanı\b|skor|nasıl gidiyor|"
+                 r"genel durum|şirketimin durumu|işletmemin durumu|firmamın durumu|"
+                 r"(?:şirket|işletme|firma)\w*\s+(?:şu an\w*\s+)?(?:ne|nasıl)\s+durum", s):
         return {"niyet": "kayit", "sorgu": "saglik", "parametreler": [], "duzeltme": "finansal sağlık kalıbı"}
     # ALACAK (fatura alacakları): vadesi geçmiş / tahsil edilmemiş faturalar, borçlu müşteri, tahsil süresi.
     # "Alacaklarım ne kadar", "tahsilat bekliyorum" gibi genel sorular kullanıcının PLANLI tahsilatlarıdır
     # (niyet.py _planli_kalibi); burada yalnızca açıkça fatura alacağını soran kalıplar var.
-    if re.search(ALACAK_KALIBI, s) or (re.search(r"müşteri", s) and re.search(MUSTERI_ODEME, s)):
+    if re.search(ALACAK_KALIBI, s) or (re.search(r"müşteri", s) and re.search(MUSTERI_ODEME, s)) \
+            or (re.search(KISIDEN_ALACAK, s) and not re.search(r"\d", s)):
         return {"niyet": "kayit", "sorgu": "alacak", "parametreler": [], "duzeltme": "alacak kalıbı"}
     # CARİ: en büyük müşteri / satıcı, müşteri payları, cari ekstre (tahsilat BEKLEME soruları planlı kayıttır)
-    if re.search(r"müşteri|tedarikçi|satıcı|\bcari", s) and not re.search(r"tahsil|alacak|bekliyor|bekledi", s) \
+    # 'En çok alım yaptığım firma': mal alımı -> satıcı cari (işe alım değil)
+    if re.search(r"(?:en çok|en fazla|en büyük|kimden|hangi \w+den)\s+(?:\w+\s+)?(?:alım|alış|satın al|mal al)\w*|"
+                 r"(?:alım|alış) yaptığım", s) and not re.search(r"işe|personel|eleman|çalışan", s):
+        return {"niyet": "kayit", "sorgu": "cari", "parametreler": ["satici"], "duzeltme": "alım -> satıcı cari"}
+    if re.search(r"müşteri|tedarikçi|satıcı|\bcari", s) and not re.search(r"tahsil|alaca[kğ]|bekliyor|bekledi", s) \
             and re.search(r"en çok|en fazla|en büyük|en az|hangi|kim|pay|ekstre|listele|sırala|dağılım|kaç|"
                           r"ne kadar|toplam|liste", s):
         tur = "satici" if re.search(r"tedarikçi|satıcı|alış yaptığım|aldığım", s) else "musteri"
@@ -234,6 +248,28 @@ def alacak_cevabi(firma_id, soru):
     from app.kayit import tarih_tr
     o, acik = ozet(firma_id), acik_alacaklar(firma_id)
     s = _kucuk(soru)
+    # Soruda müşteri adı geçiyorsa yalnız o müşteri ("Moda Butik'ten ne kadar alacağım var?")
+    musteriler = {m["musteri"] for m in musteri_performansi(firma_id)}
+    adlar = [m for m in musteriler if _kucuk(m.split()[0]) in s and (len(m.split()) == 1 or
+                                                                    _kucuk(m.split()[1])[:4] in s)]
+    if len(adlar) == 1:
+        m = adlar[0]
+        mine = [a for a in acik if a["musteri"] == m]
+        perf = next(x for x in musteri_performansi(firma_id) if x["musteri"] == m)
+        if not mine:
+            metin = f"**{m}** müşterisinden tahsil edilmemiş faturanız yok."
+        else:
+            gec = [a for a in mine if a["gecikme_gun"] > 0]
+            metin = (f"**{m}** müşterisinden **{_tl(round(sum(a['tutar'] for a in mine), 2))}** alacağınız var "
+                     f"({len(mine)} fatura" + (f", {len(gec)} tanesinin vadesi geçti" if gec else "") + "):\n\n"
+                     + "\n".join(f"- {a['id']}: {_tl(a['tutar'])}, vade {tarih_tr(a['vade'])} — "
+                                 + (f"{a['gecikme_gun']} gün gecikti" if a["gecikme_gun"] > 0
+                                    else f"{-a['gecikme_gun']} gün kaldı") for a in mine))
+        if perf["ort_tahsil_gun"] is not None:
+            metin += (f"\n\n{m} faturaları ortalama {perf['ort_tahsil_gun']:.0f} günde (vadeden sonra ortalama "
+                      f"{perf['ort_gecikme_gun']:.0f} gün) ödüyor.")
+        return {"cevap": metin, "kaynaklar": [a["id"] for a in mine] or ["analiz: alacaklar"], "satirlar": mine,
+                "yontem": "analiz"}
     ort = "—" if o["ort_tahsil_gun"] is None else f"{o['ort_tahsil_gun']:.0f} gün"
     if re.search(r"kaç gün|ne kadar süre|süre|geç öd|zamanında|ortalama", s):  # tahsil PERFORMANSI sorusu
         mp = [m for m in musteri_performansi(firma_id) if m["ort_tahsil_gun"] is not None]
@@ -258,8 +294,9 @@ def alacak_cevabi(firma_id, soru):
             metin += " Vadesi geçen alacak yok."
         bekleyen = [a for a in acik if a["gecikme_gun"] <= 0]
         if bekleyen:
-            metin += (f"\n\nVadesi gelmemiş {len(bekleyen)} fatura: {_tl(round(sum(a['tutar'] for a in bekleyen), 2))}"
-                      f" (en yakın vade {tarih_tr(min(a['vade'] for a in bekleyen))}).")
+            metin += (f"\n\nVadesi gelmemiş {len(bekleyen)} fatura ({_tl(round(sum(a['tutar'] for a in bekleyen), 2))}):\n\n"
+                      + "\n".join(f"- {a['musteri']} · {a['id']}: {_tl(a['tutar'])}, vade {tarih_tr(a['vade'])} "
+                                  f"({-a['gecikme_gun']} gün kaldı)" for a in sorted(bekleyen, key=lambda a: a['vade'])))
         if acik:
             metin += (f"\n\nMüşterileriniz ortalama {ort} içinde ödüyor." if o["ort_tahsil_gun"] is not None else "\n")
             metin += " Ayrıntı: panelin **Alacaklar** sekmesi."

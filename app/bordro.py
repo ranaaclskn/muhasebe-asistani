@@ -23,7 +23,8 @@ KARSILASTIR = (r"geçen aya göre|önceki aya göre|bir önceki|arttı|azaldı|d
                r"karşılaştır|ay öncesine|aya göre|aylara göre|ayına göre|nazaran")
 # İşe alım / işten ayrılış ("son bir senede kaç kişi işe alındı", "bu yıl işe alınanlar kimler")
 ISE_ALIM = (r"işe (?:al|gir|başla)\w*|yeni (?:çalışan|personel|eleman|işçi)\w*|istihdam|eleman al\w*|"
-            r"personel al\w*|alım yap\w*|işten (?:çık|ayrıl)\w*")
+            r"personel al\w*|(?:personel|eleman|işçi|çalışan|kişi) alım\w*|işten (?:çık|ayrıl)\w*")
+# ("alım yaptığım firma" mal ALIMIDIR, işe alım değil: çıplak "alım yap" artık işe alım sayılmaz)
 GRUPLA = (r"(?:görev|tür|pozisyon|unvan|meslek|departman|rol)\w*\s+(?:göre|bazında|bazlı)|"
           r"görev görev|her (?:bir )?görev")
 _EKLER = {"", "e", "a", "ye", "ya", "i", "ı", "u", "ü", "yi", "yı", "yu", "yü", "in", "ın", "un", "ün",
@@ -126,6 +127,9 @@ def bordro_kalibi(soru, firma_id=None):
         if 1.0 in gorev_puanlari(soru, _gorevler(firma_id)).values():
             return True
     if re.search(r"(?:görev|pozisyon|unvan|meslek|departman)\w*|eleman türü", s) and re.search(ODEME, s):
+        return True
+    # "Kaç dikiş operatörüm var?" -> görev adı TAM geçiyor + sayı soruluyor (firma kartına gidiyordu)
+    if firma_id and re.search(r"\bkaç\b|sayısı|kimler|\bkim\b", s) and 1.0 in gorev_puanlari(soru, _gorevler(firma_id)).values():
         return True
     return False
 
@@ -602,7 +606,8 @@ def bordro_cevabi(soru, firma_id):
         return _ise_alim_cevabi(s, firma_id, calisanlar)
 
     # 3) Çalışan listesi (ödeme sorulmuyorsa); görev söylendiyse yalnız o görevdekiler
-    if re.search(r"kimler|liste|isim|adları|kim var|görev|kim çalışıyor", s) and not re.search(ODEME, s):
+    if (re.search(r"kimler|liste|isim|adları|kim var|görev|kim çalışıyor", s)
+            or (gorevler and re.search(r"\bkaç\b|sayısı|\bkim\b", s))) and not re.search(ODEME, s):
         return _calisan_listesi(firma_id, gorevler)
 
     # Gelecek ay (bordrosu henüz yok): tahmin

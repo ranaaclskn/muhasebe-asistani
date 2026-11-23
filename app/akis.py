@@ -12,6 +12,7 @@ cevabıyla Command(resume=...) KALDIĞI YERDEN devam eder. interrupt'tan ÖNCE y
 
 Kontrol (proje klasöründen):  python -m app.akis
 """
+import re
 import sqlite3
 import time
 import uuid
@@ -29,7 +30,15 @@ from app.emirler import (EKSIK_SORULARI, alan_cozumle, emir_cikar, evet_mi, ipta
 from app.bordro import bordro_kalibi
 from app.kayit import cevapla_kayit, donem_tr, planli_aciklama_cevabi, tarih_tr, tl
 from app.log import log_yaz
-from app.niyet import baska_firma_adi, niyet_belirle
+from app.niyet import baska_firma_adi, niyet_belirle, yazim_duzelt
+
+# Asistan ödeme YAPAMAZ (para hareketi yok): "benim yerime KDV'mi öde", "parayı yatır". Model bunu ödeme
+# geçmişine yönlendiriyordu. "ödedim mi / ödersem / ödemeliyim" gibi sorular buraya girmez.
+ODEME_TALIMATI = (r"yerime\b.*\b(?:öde|yatır)|için (?:öde|yatır)\b|\böde\b|\bödeyin\b|\byatır(?:ın)?\b|"
+                  r"öder misin|ödeyebilir misin|yatırır mısın|yatırabilir misin|ödemeyi (?:sen |siz )?(?:yap|gerçekleştir)|"
+                  r"parayı (?:gönder|yatır|aktar)|havale (?:yap|et|gönder)|\beft (?:yap|gönder)")
+# Muhasebe dışı yaratıcı/eğlence istekleri ("şiir yaz" emir sanılıp talep akışına giriyordu)
+YARATICI = r"\bşiir|şarkı|hikaye|hikâye|masal|fıkra|espri|şaka (?:yap|anlat)|oyun oyna|yemek tarifi|film öner"
 from app.rag import cevapla_belge
 
 CHECKPOINT_YOLU = VERI_DIR / "langgraph_checkpoint.sqlite"
@@ -64,6 +73,11 @@ TALEP_ONEKI = "Muhasebeci onayına gidecek talep: "
 # 2) DÜĞÜMLER
 
 def niyet_dugumu(d: Durum):
+    s = d["soru"].replace("İ", "i").replace("I", "ı").lower()
+    if re.search(ODEME_TALIMATI, s) and not re.search(r"ödedi|ödendi|ödersem|ödemeli|ödeyece|ne zaman|ne kadar", s):
+        return {"niyet": {"niyet": "kapsam_disi", "neden": "odeme"}}
+    if re.search(YARATICI, s):
+        return {"niyet": {"niyet": "kapsam_disi", "neden": "yaratici"}}
     baska = baska_firma_adi(d["soru"], d["firma_id"])
     if baska:  # başka firma adı geçiyorsa modele hiç sormadan reddet (T12)
         return {"niyet": {"niyet": "baska_firma", "firma": baska}}
@@ -81,9 +95,48 @@ def niyet_dugumu(d: Durum):
     return {"niyet": niyet_belirle(d["soru"])}
 
 
+# ---------- Güvenlik ağı: anlaşılamayan kişisel ödeme sorusuna "kayıtlarınızda yok" DENMEZ ----------
+# Değerlendirmede (scripts/09_yuz_soru.py) en tehlikeli hata buydu: "Ödemeyi unuttuğum bir vergi var mı?" ->
+# "kayıtlarınızda yok" (oysa gecikmiş borç vardı); kullanıcı "borcum yok" diye anlar. Soru kişisel bir ödeme/borç
+# sorusuysa ve asistan cevap bulamadıysa: anlamadığını söyler ve ödeme özetini (gecikmiş + bu ay) gösterir.
+# Belirli bir dönem soruluyorsa ("2025 Mart KDV'm") "kayıtta yok" doğru cevaptır, dokunulmaz.
+_CEVAPSIZ_BAS = ("Bu bilgi kayıtlarınızda yok", "Bu soruya belgelerden emin bir cevap çıkaramadım")
+_ODEME_KONUSU = r"ödeme|öde\w*|borç|bor[cç]\w*|vergi|prim|kdv|sgk|muhtasar|geçici|gecik|yatır"
+_KISISEL = (r"\b(?:benim|bizim)\b|\w+(?:dığım|diğim|duğum|düğüm|tığım|tiğim|tuğum|tüğüm|dığımız|diğimiz)\b|"
+            r"var m[ıi]|\w+(?:ım|im|um|üm|ımız|imiz|umuz|ümüz)\b")
+
+
+def _guvenlik_agi(d, cevap):
+    from app.niyet import _soru_ayi
+    s = d["soru"].replace("İ", "i").replace("I", "ı").lower()
+    # yalnızca cevabın KENDİSİ "bulunamadı" ise (cevabın içinde bu ifade geçen dolu cevaplara dokunulmaz)
+    if not any(cevap.strip().startswith(c) for c in _CEVAPSIZ_BAS) or not re.search(_ODEME_KONUSU, s) \
+            or not re.search(_KISISEL, s):
+        return None
+    if _soru_ayi(s) or re.search(r"\b20\d{2}\b|\d{4}/\d", s):  # belirli dönem: "kayıtta yok" doğru cevap
+        return None
+    from app import db as _db
+    from app.db import yukumlulukler
+    from app.kayit import satir_metni, tl
+    bekleyen = [y for y in yukumlulukler(d["firma_id"]) if y["durum"] != "Ödendi"]
+    gec = [y for y in bekleyen if y["durum"] == "Gecikti"]
+    bu_ay = [y for y in bekleyen if y["durum"] != "Gecikti" and y["son_odeme_tarihi"][:7] <= _db.BUGUN[:7]]
+    metin = "Sorunuzu tam anlayamadım; yanlış bilgi vermemek için tahmin yürütmüyorum. Ödeme durumunuzun özeti:\n\n"
+    if gec:
+        metin += (f"**Gecikmiş ({len(gec)}):** {tl(round(sum(y['tutar_tl'] for y in gec), 2))}\n"
+                  + "\n".join(satir_metni(y) for y in gec) + "\n\n")
+    if bu_ay:
+        metin += (f"**Bu ay ödenecek ({len(bu_ay)}):** {tl(round(sum(y['tutar_tl'] for y in bu_ay), 2))}\n"
+                  + "\n".join(satir_metni(y) for y in bu_ay) + "\n\n")
+    if not gec and not bu_ay:
+        metin += "Gecikmiş ya da bu ay son günü gelen ödenmemiş vergi/prim kaydınız yok.\n\n"
+    metin += "Daha net sorabilirsiniz, örneğin: “Gecikmiş ödemem var mı?”, “Ekim KDV'm ödendi mi?”"
+    return {"cevap": metin, "kaynaklar": [y["id"] for y in gec + bu_ay], "arac": "sql"}
+
+
 def sql_dugumu(d: Durum):
     r = cevapla_kayit(d["soru"], d["firma_id"], d["niyet"])
-    return {"cevap": r["cevap"], "kaynaklar": r["kaynaklar"], "arac": "sql"}
+    return _guvenlik_agi(d, r["cevap"]) or {"cevap": r["cevap"], "kaynaklar": r["kaynaklar"], "arac": "sql"}
 
 
 def rag_dugumu(d: Durum):
@@ -93,7 +146,7 @@ def rag_dugumu(d: Durum):
         return {"cevap": kendi["cevap"], "kaynaklar": kendi["kaynaklar"], "arac": "sql"}
     r = cevapla_belge(d["soru"], d["firma_id"])
     kaynak = [r["kanit"]["kaynak"]] if r["atif"] else []  # yalnızca cevapta kullanılan kaynak
-    return {"cevap": r["cevap"], "kaynaklar": kaynak, "arac": "rag"}
+    return _guvenlik_agi(d, r["cevap"]) or {"cevap": r["cevap"], "kaynaklar": kaynak, "arac": "rag"}
 
 
 def sorgula_dugumu(d: Durum):
@@ -218,6 +271,10 @@ def reddet_dugumu(d: Durum):
     if d["niyet"]["niyet"] == "baska_firma":
         cevap = (f"Yalnızca kendi firmanızın bilgilerini görebilirsiniz; "
                  f"{d['niyet']['firma']} hakkında bilgi veremem.")
+    elif d["niyet"].get("neden") == "odeme":
+        cevap = ("Ödeme yapamam: asistan para hareketi yapmaz. Vergi ve prim ödemelerini bankanız ya da GİB/SGK "
+                 "üzerinden siz veya muhasebeciniz yaparsınız. Ne kadar ve en geç ne zaman ödemeniz gerektiğini "
+                 "sorabilirsiniz (ör. “KDV'mi en geç ne zaman ödemeliyim?”).")
     else:
         cevap = ("Ben yalnızca vergi, prim, beyanname ve fatura kayıtlarınızla ilgili sorulara "
                  "yardımcı olabilirim. Bu konuda muhasebecinize danışabilirsiniz.")
@@ -277,6 +334,7 @@ def _sonuc(cikti):
 def sor(soru, firma_id, kullanici_id=None, thread_id=None):
     """YENİ soru. Her soru yeni bir thread_id ile başlar; cevap bekleniyorsa sonuç['bekleyen'] doludur."""
     cfg = {"configurable": {"thread_id": thread_id or uuid.uuid4().hex}, "recursion_limit": 60}
+    soru = yazim_duzelt(soru)  # "kdv ne zman ödenio" -> "kdv ne zaman ödenir" (ekranda kullanıcının yazdığı kalır)
     cikti = asistan.invoke({"soru": soru, "firma_id": firma_id, "kullanici_id": kullanici_id,
                             "baslangic": time.time()}, cfg)
     return {**_sonuc(cikti), "thread_id": cfg["configurable"]["thread_id"]}
