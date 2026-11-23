@@ -16,7 +16,7 @@ import streamlit as st  # noqa: E402
 from app.akis import devam, sor  # noqa: E402
 from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
-from app.emirler import GORUSME_TEKLIFI, teklif_onayi  # noqa: E402
+from app.emirler import konu_degisti_mi, teklif_onayi, teklif_var_mi  # noqa: E402
 from app.db import (KILIT_DAKIKA, YONLER, GirisKilitli, bekleyen_talepler, erisilebilir_firma,  # noqa: E402
                     firma_bilgisi, firma_talepleri, firmalar, giris_durumu, kayitli_eposta, kullanici_dogrula,
                     planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar, yukumlulukler)
@@ -347,6 +347,11 @@ def asistan_bolumu(k, firma_id):
             # önceki cevabı bilmez); ekranda kullanıcının yazdığı, akışa açık emir gider.
             teklif = st.session_state.pop("teklif", None)
             akisa = (None if bekleyen else teklif_onayi(soru, teklif)) or soru
+            on_not = ""
+            # Asistan cevap beklerken YENİ bir soru yazıldıysa: yarım işi kapat (kayıt oluşmaz), soruyu cevapla
+            if bekleyen and konu_degisti_mi(bekleyen, soru):
+                devam("vazgeç", st.session_state.thread_id)
+                bekleyen, on_not = None, "_Yarım kalan işlemi iptal ettim._\n\n"
             st.session_state.mesajlar.append({"rol": "user", "metin": soru})
             with kutu:
                 with st.chat_message("user", avatar=KULLANICI_AVATAR):
@@ -361,12 +366,13 @@ def asistan_bolumu(k, firma_id):
                         kaynak = "Yol: soru · Cevabınız bekleniyor"
                     else:
                         kaynak = f"Yol: {s['arac']} · Kaynak: {', '.join(s['kaynaklar']) or '—'}"
+                    s["cevap"] = on_not + s["cevap"]
                     st.write(s["cevap"])
                     st.caption(kaynak)
             st.session_state.mesajlar.append({"rol": "assistant", "metin": s["cevap"], "kaynak": kaynak})
             st.session_state.bekleyen = s["bekleyen"]
             st.session_state.thread_id = s["thread_id"] if s["bekleyen"] else None
-            if not s["bekleyen"] and GORUSME_TEKLIFI in s["cevap"]:
+            if not s["bekleyen"] and teklif_var_mi(s["cevap"]):
                 st.session_state.teklif = soru  # konu: teklifi doğuran soru
             st.rerun()  # butonlar / ipucu güncel duruma göre yeniden çizilsin
 

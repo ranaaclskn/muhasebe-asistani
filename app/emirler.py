@@ -163,15 +163,39 @@ def evet_mi(cevap):
 # Asistanın cevabın sonunda yaptığı teklif ("isterseniz bir görüşme talebi oluşturabilirim").
 # Arayüz bu metni görünce teklifi hatırlar; sonraki kısa onay ("oluştur", "evet") açık emre çevrilir.
 GORUSME_TEKLIFI = "görüşme talebi oluşturabilirim"
+# Cevapsız kalan sorularda (RAG / kayıt yok) "muhasebecinize iletebilirim" de bir tekliftir: "ilet" ona onaydır
+TEKLIFLER = (GORUSME_TEKLIFI, "muhasebecinize iletebilirim")
+
+
+def teklif_var_mi(cevap):
+    return any(t in cevap for t in TEKLIFLER)
 
 
 def teklif_onayi(cevap, onceki_soru):
     """Bir önceki cevaptaki görüşme teklifine kısa onay mı verildi? -> akışa gidecek açık emir; değilse None.
     'oluştur' tek başına hangi işlem olduğunu söylemez; konu da önceki sorudan alınır (talep anlamlı olsun)."""
-    if not onceki_soru or not re.fullmatch(r"\s*(evet|e|olur|tamam|isterim|lütfen|yap|oluştur\w*)"
+    if not onceki_soru or not re.fullmatch(r"\s*(evet|e|olur|tamam|isterim|lütfen|yap|oluştur\w*|ilet\w*)"
                                            r"(\s+(lütfen|evet))?\s*[.!]?\s*", _kucuk(cevap)):
         return None
     return f"Muhasebecimle görüşme talebi oluştur. Konu: {onceki_soru}"
+
+
+_SORU_KALIBI = r"\?|\b(nedir|ne kadar|neler|ne zaman|nasıl|kaç|hangi\w*|var mı|kimden|kime)\b"
+
+
+def konu_degisti_mi(bekleyen, cevap):
+    """Asistan bir şey sorup cevap beklerken kullanıcı YENİ bir soru mu yazdı? ('Hangi beyanname?' sorusuna
+    'gecikme zammı oranı nedir' yazınca 3 kez 'Anlayamadım' diyordu.) Bekleyen sorunun cevabı olarak
+    anlaşılabiliyorsa (KDV, Eylül, evet...) ya da iptal ise False; arayüz True'da yarım işi kapatıp soruyu cevaplar."""
+    s = _kucuk(cevap)
+    if not bekleyen or iptal_mi(cevap) or len(s.split()) < 2 or not re.search(_SORU_KALIBI, s):
+        return False
+    if bekleyen.get("tur") == "onay":
+        return not evet_mi(cevap)
+    alan = bekleyen.get("alan")
+    if alan == "emir":
+        return emir_cikar(cevap)["emir"] is None
+    return alan_cozumle(alan, cevap) is None
 
 
 def talep_sorgu_kalibi(soru):

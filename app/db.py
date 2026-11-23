@@ -126,6 +126,18 @@ SORGULAR = {
                   WHERE firma_id = :firma_id AND durum = 'Ödendi' AND odeme_tarihi > son_odeme_tarihi
                   ORDER BY odeme_tarihi DESC""",
     },
+    # "KDV'mi en geç ne zaman ödemeliyim" -> o türün ödenmemiş (bekleyen ya da gecikmiş) en eski kaydı.
+    # Model bunu ödeme GEÇMİŞİNE gönderiyordu; kalıbı kod tanır (niyet._son_tarih_kalibi).
+    "siradaki_tur": {
+        "aciklama": "Bir türün ödenmemiş en yakın kaydı ve son ödeme tarihi (KDV'mi en geç ne zaman ödemeliyim)",
+        "parametreler": ["tur"],
+        "menude_yok": True,
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND tur = :tur AND durum != 'Ödendi'
+                  ORDER BY son_odeme_tarihi, id
+                  LIMIT 1""",
+    },
     "en_yakin": {
         "aciklama": "Bugünden sonraki en yakın son ödeme tarihi olan ödenmemiş ödeme",
         "parametreler": [],

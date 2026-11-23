@@ -568,3 +568,61 @@ def test_gecmis_tahsilat_edilecek_denmez(monkeypatch):  # 11.11'deki tahsilata 2
     assert "tarihi geçti, tahsil edildi mi kontrol edin" in kayit.satir_metni(s)
     assert kayit.satir_metni({**s, "tarih": "2026-11-23"}).endswith("tahsil edilecek")  # bugün: henüz geçmedi
     assert "ödendi mi" in kayit.satir_metni({**s, "yon": "Gider"})
+
+
+# --- 2026-11-23 (akşam) deneme soruları ---
+@pytest.mark.parametrize("soru", ["sigortaya bu ay ne kadar yatıracağım", "bu ay sigorta borcum ne kadar ödeyeceğim"])
+def test_sigortaya_yatiracagim(soru):  # kapsam dışı (ret) diyordu
+    n = kural_duzelt(soru, {"niyet": "kapsam_disi", "sorgu": None, "parametreler": []})
+    assert n["sorgu"] == "ay_odemeleri" and n["parametreler"] == ["2026-11", "SGK primi"]
+
+
+def test_issizlik_sigortasi_sgk_primi_sayilmaz():
+    n = kural_duzelt("bu ay işsizlik sigortası kesintisi ne kadar ödeyeceğim",
+                     {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]})
+    assert "SGK primi" not in n["parametreler"]
+
+
+def test_kdv_en_gec_ne_zaman(monkeypatch):  # ödeme GEÇMİŞİNİ listeliyordu
+    monkeypatch.setattr(db, "BUGUN", "2026-11-23")
+    n = kural_duzelt("KDV'mi en geç ne zaman ödemeliyim",
+                     {"niyet": "kayit", "sorgu": "odeme_gecmisi", "parametreler": ["KDV"]})
+    assert n["sorgu"] == "siradaki_tur" and n["parametreler"] == ["KDV"]
+    c = cevapla_kayit("x", "F001", n)["cevap"]
+    assert "30.11.2026" in c and "39.957,26 TL" in c and "27.10.2026" not in c
+    n = kural_duzelt("Ekim KDV'mi ne zaman ödedim", {"niyet": "kayit", "sorgu": "durum", "parametreler": ["KDV", "2026-10"]})
+    assert n["sorgu"] != "siradaki_tur"  # geçmiş zaman / ay var: eski yol
+
+
+def test_bugun_odersem_ne_kadar(monkeypatch):  # RAG "bilgi yok" diyordu
+    import app.kayit as kayit
+    for m in (db, kayit):
+        monkeypatch.setattr(m, "BUGUN", "2026-11-23")
+    n = kural_duzelt("geçici vergiyi bugün ödersem toplam ne kadar öderim",
+                     {"niyet": "belge", "sorgu": None, "parametreler": []})
+    assert n["sorgu"] == "bugun_odersem" and n["parametreler"] == ["Geçici vergi"]
+    assert "55.345,20 TL" in cevapla_kayit("x", "F001", n)["cevap"]
+    c = cevapla_kayit("x", "F001", {"sorgu": "bugun_odersem", "parametreler": ["KDV"]})["cevap"]
+    assert "henüz gecikmedi" in c and "39.957,26 TL" in c and "54.938,65" not in c
+    n = kural_duzelt("SGK primini geç ödersem ne olur", {"niyet": "kayit", "sorgu": "durum", "parametreler": []})
+    assert n["niyet"] == "belge"  # genel kural sorusu belgeye gider
+
+
+def test_ilet_cekimser_teklife_onaydir():  # "ilet" beyanname gönderme emrine gidiyordu
+    from app.emirler import emir_cikar, teklif_onayi, teklif_var_mi
+    assert teklif_var_mi("Bu bilgi kayıtlarınızda yok, muhasebecinize iletebilirim.")
+    emir = teklif_onayi("ilet", "geçici vergiyi yarın ödersem ne olur")
+    assert emir and emir_cikar(emir)["emir"] == "gorusme_talebi"
+
+
+def test_bekleyen_soruda_yeni_soru():  # "Hangi beyanname?" sorusuna yeni soru yazınca "Anlayamadım" diyordu
+    from app.emirler import konu_degisti_mi
+    alan = {"tur": "alan", "alan": "belge_turu"}
+    assert konu_degisti_mi(alan, "gecikme zammı oranı nedir")
+    assert not konu_degisti_mi(alan, "KDV")                 # bekleyen sorunun cevabı
+    assert not konu_degisti_mi(alan, "KDV mi?")
+    assert not konu_degisti_mi(alan, "vazgeç")
+    assert konu_degisti_mi({"tur": "onay"}, "bu ay ne kadar ödeyeceğim?")
+    assert not konu_degisti_mi({"tur": "onay"}, "evet")
+    assert konu_degisti_mi({"tur": "alan", "alan": "emir"}, "KDV ne zaman ödenir?")
+    assert not konu_degisti_mi({"tur": "alan", "alan": "emir"}, "Eylül KDV beyannamemi gönder")

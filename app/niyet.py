@@ -176,10 +176,12 @@ def dogrula(cikti):
 
 
 # Bu kelimelerden biri geçen soru muhasebe alanındadır; model "kapsam_disi" dese bile düzeltilir.
-ALAN_KELIMELERI = ["vergi", "kdv", "sgk", "prim", "muhtasar", "beyanname", "ödeme", "ödedim", "öder",
+ALAN_KELIMELERI = ["vergi", "kdv", "sgk", "prim", "sigorta", "muhtasar", "beyanname", "ödeme", "ödedim", "öder",
                    "fatura", "borç", "matrah", "stopaj", "muhasebe", "ceza", "gecik"]
 _TUR_KELIMELERI = [("geçici vergi", "Geçici vergi"), ("kdv", "KDV"), ("muhtasar", "Muhtasar"),
-                   ("sgk", "SGK primi"), ("sigorta prim", "SGK primi"), ("prim", "SGK primi")]
+                   ("sgk", "SGK primi"), ("sigorta", "SGK primi"), ("prim", "SGK primi")]
+# Ödeme fiilleri: "ödeyeceğim / ödenecek / ödemem" ve "sigortaya yatıracağım"
+_ODEME_FIILI = r"öde(?:yece|me|necek)|yatır(?:aca|ıla|ma)"
 
 
 def _kucuk(metin):
@@ -191,6 +193,8 @@ def kural_duzelt(soru, sonuc):
     1) Alan kelimesi geçen soru kapsam dışı olamaz -> belge.
     2) Soruda açıkça ay/yıl veya tür yazıyorsa parametreyi sorudan al (model ayı/yılı karıştırabiliyor)."""
     s = _kucuk(soru)
+    # "işsizlik sigortası" bordro kesintisidir, SGK prim borcu değil: tür sözlüğündeki "sigorta"ya takılmasın
+    s = re.sub(r"işsizlik sigorta\w*", "işsizlik kesintisi", s)
     # Analiz soruları (sağlık puanı, cari, senaryo, uyarılar) en önce: "satışlar düşerse ne olur" aşağıdaki
     # "varsayım -> belge" kuralına gitmesin; cevabı kod üretir (app/analiz_sorulari.py).
     analiz = analiz_kalibi(soru)
@@ -207,6 +211,13 @@ def kural_duzelt(soru, sonuc):
     if _gecikme_orani_kalibi(s):
         return {"niyet": "kayit", "sorgu": "gecikme_orani", "parametreler": [],
                 "duzeltme": f"gecikme zammı oranı kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
+    # "Geçici vergiyi bugün ödersem toplam ne kadar öderim?" -> kişisel hesap (ana borç + varsa zam), KOD verir.
+    # Aşağıdaki "ödersem -> belge" kuralından ÖNCE olmalı (RAG "bilgi yok" diyordu).
+    if _bugun_odersem_kalibi(s):
+        turler = {t for k, t in _TUR_KELIMELERI if k in s}
+        return {"niyet": "kayit", "sorgu": "bugun_odersem",
+                "parametreler": [turler.pop()] if len(turler) == 1 else [],
+                "duzeltme": f"bugün ödersem kalıbı (model: {sonuc['niyet']}/{sonuc.get('sorgu')})"}
     # "SGK primini geç ödersem ne olur?" varsayım/kural sorusudur, kişisel kayıt değil -> belge (SSS)
     if sonuc["niyet"] == "kayit" and re.search(r"ödersem|verirsem|ödemezsem|vermezsem|\bne olur\b|"
                                                r"(?:faiz|zam\w*|ceza\w*) oran|nasıl hesaplan", s):
@@ -257,11 +268,15 @@ def kural_duzelt(soru, sonuc):
     tur_var = any(k in s for k, _ in _TUR_KELIMELERI)
     aralik = _son_n_ay(s)
     planli = _planli_kalibi(s)
+    tek_tur = {t for k, t in _TUR_KELIMELERI if k in s}
     # Kullanıcının kendi eklediği planlı ödeme / tahsilat soruları (ay aşağıda isteğe bağlı eklenir)
     if planli:
         sorgu, yeni = planli, []
     elif _gec_odeme_kalibi(s):
         sorgu, yeni = "gec_odenenler", []
+    # "KDV'mi en geç ne zaman ödemeliyim" -> o türün sıradaki ödenmemiş kaydı (model ödeme geçmişini veriyordu)
+    elif _son_tarih_kalibi(s) and len(tek_tur) == 1:
+        sorgu, yeni = "siradaki_tur", [tek_tur.pop()]
     # "son ödeme tarihi geçmiş / vadesi geçen ödemeler" -> ŞU AN gecikmiş (ödenmemiş) kayıtlar
     elif _gecikmis_kalibi(s) and sorgu != "gecikmis":
         sorgu, yeni = "gecikmis", []
@@ -294,7 +309,7 @@ def kural_duzelt(soru, sonuc):
           and any(re.search(rf"\b{ay}", s) for ay in AYLAR)):
         sorgu, yeni = "durum", ["", ""]  # tür ve dönem aşağıda sorudan doldurulur
     # "bu ay ... ödeyeceğim/ödenecek" -> her zaman bu ayın ödenmemişleri
-    elif re.search(r"\bbu ay", s) and re.search(r"öde(yece|me|necek)", s) and sorgu != "ay_odemeleri":
+    elif re.search(r"\bbu ay", s) and re.search(_ODEME_FIILI, s) and sorgu != "ay_odemeleri":
         sorgu, yeni = "ay_odemeleri", [bu_ay]
 
     adlar = SORGULAR[sorgu]["parametreler"]
@@ -339,6 +354,8 @@ def _kesin_kayit(s):
         return _planli_kalibi(s)
     if _gec_odeme_kalibi(s):  # geçmişte geç ÖDENMİŞ ("gecikmiş ödediğim", "...vardı")
         return "gec_odenenler"
+    if _son_tarih_kalibi(s) and any(k in s for k, _ in _TUR_KELIMELERI):
+        return "siradaki_tur"
     if _gecikmis_kalibi(s):  # ŞU AN ödenmemiş ve son tarihi geçmiş
         return "gecikmis"
     if _fatura_kalibi(s):
@@ -355,7 +372,7 @@ def _kesin_kayit(s):
         return _ay_toplam_sorgusu(s)
     if re.search(r"ayında|ayı içinde|geçen ay|bu ay", s) and re.search(r"ödenen\b|ödedi|ödemiş", s):
         return "odenenler"
-    if re.search(r"\bbu ay", s) and re.search(r"öde(yece|me|necek)", s):
+    if re.search(r"\bbu ay", s) and re.search(_ODEME_FIILI, s):
         return "ay_odemeleri"
     ay_var = any(re.search(rf"\b{ay}", s) for ay in AYLAR)
     tur_var = any(k in s for k, _ in _TUR_KELIMELERI)
@@ -398,12 +415,26 @@ def _faiz_kalibi(s):
                 and re.search(r"ödemeler\w*|bor[cç]\w*|ödememin|benim|var mı|ne kadar|kaç|toplam", s)
                 and not re.search(r"ödersem|verirsem|ödemezsem|ne olur|nasıl hesap|oranı", s)) 
 
+def _son_tarih_kalibi(s):
+    """'KDV'mi en geç ne zaman ödemeliyim', 'SGK primi ne zamana kadar ödenir', 'muhtasarın son günü ne'.
+    Soruda ay varsa o dönemin kaydı (durum) daha doğrudur -> burada tutulmaz. Geçmiş zaman ('ödedim') hariç."""
+    return bool(re.search(r"en geç|ne zamana kadar|son (?:ödeme )?(?:tarihi|günü)|ne zaman öde(?:meli|yece|mem)", s)
+                and not re.search(r"ödedi|ödendi|ödemiş|ödenmiş", s) and not _soru_ayi(s))
+
+
+def _bugun_odersem_kalibi(s):
+    """'geçici vergiyi bugün ödersem toplam ne kadar öderim', 'KDV'yi şimdi ödesem kaç lira'.
+    Genel kural soruları ('geç ödersem ne olur') ve ileri tarih ('yarın', '5 aralıkta') buraya girmez."""
+    return bool(re.search(r"öde(?:r)?sem\b", s) and re.search(r"ne kadar|toplam|kaç", s)
+                and not re.search(r"\bgeç\b|gecik|ne olur|yarın|haftaya|ay sonu|\d", s))
+
+
 def _gider_kalibi(s):
     """Bir ayın TOPLAM gideri / nakit çıkışı mı soruluyor? Tür (KDV, SGK...), maaş, fatura ya da planlı
     ödeme adı geçiyorsa o özel yol kullanılır, buraya girmez."""
     genel = re.search(r"gider|harcama|masraf|nakit çıkış|para çıkış|ne kadar para (?:çıkacak|gidecek)|"
                       r"(?:toplam )?ne kadar (?:ödeme yapaca|ödeyece)|toplam ödeyece", s)
-    ozel = re.search(r"personel|maaş|ücret|bordro|işçilik|plan|fatura|kdv|muhtasar|sgk|prim|geçici|beyan|"
+    ozel = re.search(r"personel|maaş|ücret|bordro|işçilik|plan|fatura|kdv|muhtasar|sgk|prim|sigorta|geçici|beyan|"
                      r"vergi", s)
     return bool(genel and not ozel)
 

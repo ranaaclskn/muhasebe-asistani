@@ -123,6 +123,14 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
                     f"{tarih_tr(s['odeme_tarihi'])} tarihinde ödendi.")
         return (f"{donem_tr(s['donem'])} {s['tur']}: {tl(s['tutar_tl'])}, durum: {s['durum']}, "
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
+    if sorgu == "siradaki_tur":
+        s = satirlar[0]
+        if s["durum"] == "Gecikti":
+            return (f"{s['tur']} ({donem_tr(s['donem'])} dönemi, {tl(s['tutar_tl'])}) için son ödeme tarihi "
+                    f"**{tarih_tr(s['son_odeme_tarihi'])}** idi; bu tarih geçti, gecikme zammı işliyor. "
+                    f"Tutarı için “gecikmiş ödemelerimin faizi ne kadar?” diye sorabilirsiniz.")
+        return (f"{s['tur']} ({donem_tr(s['donem'])} dönemi) için en geç **{tarih_tr(s['son_odeme_tarihi'])}** "
+                f"tarihinde ödemelisiniz; tutar {tl(s['tutar_tl'])}.")
     if sorgu == "en_yakin":
         s = satirlar[0]
         return (f"En yakın ödeme: {s['tur']} ({donem_tr(s['donem'])}), {tl(s['tutar_tl'])}, "
@@ -258,7 +266,7 @@ def gecikme_orani_cevabi(firma_id=None):
             "yontem": "gecikme_orani"}
 
 
-def gecikme_faizi_cevabi(firma_id, ay=None):
+def gecikme_faizi_cevabi(firma_id, ay=None, tur=None):
     """'Gecikmiş ödemelerimin faizi ne kadar?' / 'faizleriyle toplam ödenecek tutar' -> gecikmiş borçlar,
     kaç gündür gecikmiş, BUGÜNE kadarki TAHMİNİ gecikme zammı ve toplam (hepsini Python hesaplar).
     - Vergi kalemleri: ana borç × aylık oran/30 × gün (oran config'ten; cevapta açıkça yazılır).
@@ -266,7 +274,8 @@ def gecikme_faizi_cevabi(firma_id, ay=None):
     Ana borç asla 'faiz' diye sunulmaz."""
     from datetime import date
     bugun = date.fromisoformat(BUGUN)
-    satirlar = [s for s in calistir("gecikmis", firma_id) if not ay or s["son_odeme_tarihi"][:7] == ay]
+    satirlar = [s for s in calistir("gecikmis", firma_id)
+                if (not ay or s["son_odeme_tarihi"][:7] == ay) and (not tur or s["tur"] == tur)]
     kapsam = f"{donem_tr(ay)} içinde son tarihi geçmiş" if ay else "Son ödeme tarihi geçmiş"
     if not satirlar:
         return {"cevap": f"{kapsam} ödenmemiş borcunuz yok; bu yüzden gecikme faizi / zammı da doğmaz.",
@@ -303,6 +312,25 @@ def gecikme_faizi_cevabi(firma_id, ay=None):
     metin += f"\n\nKesin tutar için muhasebecinize danışın; isterseniz bir {GORUSME_TEKLIFI}."
     return {"cevap": metin, "kaynaklar": [s["id"] for s in satirlar] + ["6183 md.51 (oran: " + oran_tr + "/ay)"],
             "satirlar": satirlar, "yontem": "gecikme_faizi"}
+
+
+def bugun_odersem_cevabi(firma_id, tur=None):
+    """'Geçici vergiyi bugün ödersem toplam ne kadar öderim?' Gecikmişse ana borç + tahmini zam
+    (gecikme_faizi_cevabi); gecikmemişse zam yoktur, ödenecek tutar ana borçtur."""
+    if calistir("gecikmis", firma_id) and (not tur or any(s["tur"] == tur for s in calistir("gecikmis", firma_id))):
+        return gecikme_faizi_cevabi(firma_id, tur=tur)
+    if not tur:
+        return {"cevap": "Gecikmiş borcunuz yok; bugün öderseniz gecikme zammı eklenmez, kayıttaki tutarı ödersiniz. "
+                         "Hangi ödemeyi sorduğunuzu yazarsanız (ör. KDV) tutarını söyleyebilirim.",
+                "kaynaklar": [], "satirlar": [], "yontem": "bugun_odersem"}
+    s = calistir("siradaki_tur", firma_id, tur)
+    if not s:
+        return {"cevap": f"Ödenmemiş {tur} kaydınız yok.", "kaynaklar": [], "satirlar": [], "yontem": "bugun_odersem"}
+    s = s[0]
+    return {"cevap": f"{s['tur']} ({donem_tr(s['donem'])} dönemi) henüz gecikmedi, son ödeme tarihi "
+                     f"{tarih_tr(s['son_odeme_tarihi'])}. Bugün öderseniz gecikme zammı yoktur; ödeyeceğiniz tutar "
+                     f"**{tl(s['tutar_tl'])}**.",
+            "kaynaklar": [s["id"]], "satirlar": [s], "yontem": "bugun_odersem"}
 
 
 def planli_aciklama_cevabi(soru, firma_id, esik=0.6):
@@ -436,6 +464,8 @@ def cevapla_kayit(soru, firma_id, niyet):
         return gecikme_orani_cevabi(firma_id)
     if sorgu == "gecikme_faizi":  # gecikmiş borç + tahmini gecikme zammı (oran config'ten)
         return gecikme_faizi_cevabi(firma_id, *parametreler)
+    if sorgu == "bugun_odersem":  # ana borç + (gecikmişse) tahmini zam: Python hesaplar
+        return bugun_odersem_cevabi(firma_id, *parametreler)
     if sorgu == "aylik_gider":  # vergi + maaş + planlı: Python birleştirir
         return aylik_gider_cevabi(firma_id, *parametreler)
     if sorgu == "bordro":  # çalışan/maaş: app/bordro.py (döngüsel import olmasın diye burada)
@@ -461,7 +491,7 @@ def cevapla_kayit(soru, firma_id, niyet):
     # Kaynak etiketi her zaman metin: resmî kayıtlar 'Y018', kullanıcının eklediği kayıtlar 'plan#3'
     kaynaklar = [f"plan#{s['id']}" if "yon" in s else str(s["id"]) for s in satirlar]
     # ay_odemeleri tek kayıtta da şablon: model "sigorta primi" sorusunda son tarihi atıp bozuk cümle kuruyordu
-    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
+    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
         return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,
