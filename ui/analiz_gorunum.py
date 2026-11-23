@@ -53,6 +53,9 @@ ANALIZ_CSS = """
 .kova .k3 { border-top:3px solid #e0703a; } .kova .k4 { border-top:3px solid #b42318; }
 
 .saglik { display:grid; grid-template-columns:210px 1fr; gap:22px; align-items:center; }
+.saglik.ozet { grid-template-columns:150px 1fr; gap:18px; }
+.saglik.ozet .halka { width:140px; height:140px; } .saglik.ozet .halka > div { width:104px; height:104px; }
+.saglik.ozet .halka .p { font-size:2rem; }
 .halka { width:170px; height:170px; border-radius:50%; display:grid; place-items:center; margin:auto;
          background:conic-gradient(var(--renk) calc(var(--p) * 1%), #e9edf2 0); }
 .halka > div { width:128px; height:128px; border-radius:50%; background:#fff; display:grid; place-items:center;
@@ -156,7 +159,8 @@ def cari_html(liste, baslik):
                                     f'<tbody>{satir}</tbody></table></div>'
 
 
-def saglik_html(g):
+def saglik_html(g, ozet=False):
+    """ozet=True: ana sayfadaki kart için yalnızca puan halkası + bileşenler (metrik kartları sekmede)."""
     renk = "#1a7f37" if g["puan"] >= 80 else "#2a78d6" if g["puan"] >= 60 else "#d29b00" if g["puan"] >= 40 else "#b42318"
     bilesen = "".join(
         f'<div class="bilesen"><div class="ust"><b>{a}</b><span>{f"{p:.1f}".replace(".", ",")} / {m}</span></div>'
@@ -178,10 +182,12 @@ def saglik_html(g):
     ]
     kartlar = "".join(f'<div class="metrik"><div class="e">{e}</div><div class="d">{d}</div><div class="a">{a}</div>'
                       f'</div>' for e, d, a in metrikler)
-    return (ANALIZ_CSS + f'<div class="saglik"><div class="halka" style="--p:{g["puan"]};--renk:{renk}"><div>'
+    if ozet:
+        kartlar = ""
+    return (ANALIZ_CSS + f'<div class="saglik{" ozet" if ozet else ""}"><div class="halka" style="--p:{g["puan"]};--renk:{renk}"><div>'
             f'<div><div class="p">{g["puan"]}</div><div class="l">{g["etiket"]}</div>'
             f'<div style="font-size:.7rem;color:#8a94a3">/ 100</div></div></div></div><div>{bilesen}</div></div>'
-            f'<div class="metrikler">{kartlar}</div>')
+            + (f'<div class="metrikler">{kartlar}</div>' if kartlar else ""))
 
 
 def senaryo_grafigi(s):

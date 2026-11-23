@@ -36,10 +36,13 @@ from ui.tablolar import ay_etiketi, excel_raporu, hareket_tablosu, nakit_html, p
 st.set_page_config(page_title="Muhasebe Asistanı", page_icon=":material/account_balance:", layout="wide",
                    initial_sidebar_state="expanded")
 
-ONERILER = ["Bu ay toplam ne kadar vergi ve prim ödeyeceğim?", "Gecikmiş ödemem var mı?",
-            "Finansal sağlık puanım kaç?", "En çok satış yaptığım müşteri kim?",
-            "Satışlar %10 düşerse 6 ay sonra durumum ne olur?", "Nelere dikkat etmeliyim?",
-            "Son muhtasar beyannamemi e-postama gönder."]
+# (düğme yazısı, asistana giden soru): kısa yazılar yazma alanının üstüne iki satırda sığar
+ONERILER = [("Bu ayın ödemeleri", "Bu ay toplam ne kadar vergi ve prim ödeyeceğim?"),
+            ("Gecikmiş ödemeler", "Gecikmiş ödemem var mı?"),
+            ("Sağlık puanım", "Finansal sağlık puanım kaç?"),
+            ("En iyi müşterim", "En çok satış yaptığım müşteri kim?"),
+            ("Satış %10 düşerse?", "Satışlar %10 düşerse 6 ay sonra durumum ne olur?"),
+            ("Muhtasarımı e-postala", "Son muhtasar beyannamemi e-postama gönder.")]
 ASISTAN_AVATAR, KULLANICI_AVATAR = ":material/support_agent:", ":material/person:"
 
 # ---------- GÖRÜNÜM (CSS) ----------
@@ -73,7 +76,7 @@ st.markdown("""
 
 /* Kartlar */
 .st-key-asistan_kart, .st-key-grafik_kart, .st-key-yaklasan_kart, .st-key-alt_kart, .st-key-giris_kart,
-.st-key-uyari_kart, .st-key-takvim_kart, .st-key-dosya_kart {
+.st-key-uyari_kart, .st-key-takvim_kart, .st-key-dosya_kart, .st-key-saglik_kart {
     background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; }
 .st-key-asistan_kart, .st-key-dosya_kart { border-top:3px solid var(--brand); }
 .st-key-dosya_bandi { background:#fff7df; border:1px solid #f0d58c; border-radius:8px; padding:8px 14px; }
@@ -96,7 +99,7 @@ st.markdown("""
 /* Asistan (giriş kutusu dahil) ilk ekrana sığsın: sohbet alanının yüksekliği ekran boyuna göre.
    Streamlit sabit yüksekliği kutunun üst katmanına (stLayoutWrapper) flex ile verir; onu eziyoruz. */
 [data-testid="stLayoutWrapper"]:has(> .st-key-sohbet_kutu) {
-    flex:0 0 max(260px, calc(100vh - 365px)) !important; height:max(260px, calc(100vh - 365px)) !important; }
+    flex:0 0 max(260px, calc(100vh - 440px)) !important; height:max(260px, calc(100vh - 440px)) !important; }
 /* Sekme değişince sayfa kaymasın: sekme içerikleri sabit yükseklikte, taşan kısım kendi içinde kayar */
 .st-key-alt_kart [role="tabpanel"] { height:640px; overflow-y:auto; overflow-x:hidden; }
 .st-key-grafik_kart [role="tabpanel"] { height:150px; overflow-y:auto; overflow-x:hidden; }
@@ -105,9 +108,12 @@ st.markdown("""
 .st-key-sohbet_kutu [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
     background:#eef3f9; border-color:#d5e0ee; }
 .st-key-oneriler button { border-radius:4px !important; background:#fff !important; border:1px solid var(--line) !important;
-                          color:var(--ink) !important; min-height:0 !important; padding:3px 12px !important; }
+                          color:var(--ink) !important; min-height:0 !important; padding:3px 9px !important; }
 .st-key-oneriler button:hover { border-color:var(--brand) !important; color:var(--brand) !important; }
-.st-key-oneriler button p { font-size:.83rem !important; }
+.st-key-oneriler button p { font-size:.8rem !important; white-space:nowrap; }
+/* Hazır sorular yazma alanının hemen üstünde sabit (sohbetle birlikte kaymaz); kısa yazılar iki satıra sığar */
+.st-key-oneriler { flex-wrap:wrap !important; gap:6px !important; padding:2px 0 4px; }
+.st-key-oneriler > div { flex:0 0 auto !important; width:auto !important; }
 
 /* Gelir–gider özeti ve dağılım */
 .ozet3 { display:grid; grid-template-columns:repeat(3, 1fr); border:1px solid var(--line); border-radius:6px; margin:12px 0 6px; }
@@ -130,6 +136,12 @@ st.markdown("""
 .odeme .tarih { color:var(--muted); font-size:.8rem; }
 .odeme .kalan { font-size:.78rem; text-align:right; color:var(--muted); }
 .odeme .kalan.kotu { color:var(--bad); font-weight:600; } .odeme .kalan.uyari { color:var(--warn); font-weight:600; }
+.odeme .tutar.giris { color:var(--good); } .odeme .kalan.iyi { color:var(--good); }
+.st-key-yaklasan_ekle button { margin-top:10px; border-style:dashed !important; color:var(--brand) !important; }
+/* Yan menüde en belirgin düğme: planlı kayıt her an eklenebilsin (koyu zeminde beyaz) */
+[data-testid="stSidebar"] .st-key-yan_planli button { background:#fff !important; border-color:#fff !important; }
+[data-testid="stSidebar"] .st-key-yan_planli button:hover { background:#e8eef5 !important; }
+[data-testid="stSidebar"] .st-key-yan_planli button * { color:var(--brand) !important; font-weight:700 !important; }
 
 /* Yan menü (lacivert) */
 [data-testid="stSidebar"] { background:var(--brand); }
@@ -230,6 +242,37 @@ def giris_ekrani():
 
 
 # ---------- 2a) KULLANICININ KENDİ EKLEDİĞİ PLANLI ÖDEME / TAHSİLATLAR ----------
+def planli_formu(k, firma_id, anahtar):
+    """Planlı ödeme/tahsilat formu (sekmede ve 'Planlı kayıt ekle' penceresinde aynı form).
+    Doğrulama db.planli_islem_ekle'de; sonuç mesajı bir sonraki çizimde gösterilir. Eklendiyse True."""
+    with st.form(anahtar, clear_on_submit=True, border=False):
+        yon = st.radio("Tür", list(YONLER), format_func=YONLER.get, horizontal=True)
+        c1, c2 = st.columns(2)
+        tarih = c1.date_input("Tarih", value=date.fromisoformat(BUGUN), format="DD.MM.YYYY")
+        tutar = c2.number_input("Tutar (TL)", min_value=0.0, step=100.0, format="%.2f")
+        aciklama = st.text_input("Açıklama", placeholder="ör. Aralık kirası, X müşterisi faturası")
+        karsi = st.text_input("Karşı taraf (isteğe bağlı)", placeholder="ör. Ev sahibi, ABC Ltd.")
+        if st.form_submit_button("Kaydı ekle", type="primary", icon=":material/add:"):
+            try:
+                no = planli_islem_ekle(firma_id, k["id"], yon, tarih.isoformat(), tutar, aciklama, karsi)
+                st.session_state.planli_mesaj = ("success", f"Planlı kayıt eklendi (#{no}): {tarih.strftime('%d.%m.%Y')}"
+                                                 f" · {tl(tutar)} · {aciklama}. Yaklaşan listesinde ve grafikte "
+                                                 "görünür; asistana da sorabilirsiniz.")
+                return True
+            except ValueError as e:
+                st.error(f"Eklenemedi: {e}")
+    return False
+
+
+@st.dialog("Planlı ödeme / tahsilat ekle")
+def planli_penceresi(k, firma_id):
+    """Sayfanın her yerinden (yan menü, Yaklaşan kartı) açılan ekleme penceresi: sekmeyi aramaya gerek kalmaz."""
+    st.caption("Kira, kredi taksiti, müşteriden beklenen ödeme gibi kendi kayıtlarınız. Eklediğiniz kayıt "
+               "yaklaşan ödemelerde, gelir–gider grafiğinde ve asistanın cevaplarında yer alır.")
+    if planli_formu(k, firma_id, "planli_ekle_pencere"):
+        st.rerun()
+
+
 def planli_bolumu(k, firma_id, salt_okunur=False):
     """Form -> db.planli_islem_ekle (doğrulama orada) -> planli_islemler tablosu.
     Eklenen kayıtlar sohbetten sorulabilir ve gelir–gider grafiğine de yansır.
@@ -245,27 +288,11 @@ def planli_bolumu(k, firma_id, salt_okunur=False):
         else:
             st.caption("Firma henüz planlı kayıt eklememiş.")
         return
-    mesaj = st.session_state.pop("planli_mesaj", None)
-    if mesaj:
-        getattr(st, mesaj[0])(mesaj[1])
     sol, sag = st.columns([1, 1.6], gap="large")
     with sol:
         html('<div class="bolum-etiket">Yeni kayıt</div>')
-        with st.form("planli_ekle", clear_on_submit=True, border=False):
-            yon = st.radio("Tür", list(YONLER), format_func=YONLER.get, horizontal=True)
-            c1, c2 = st.columns(2)
-            tarih = c1.date_input("Tarih", value=date.fromisoformat(BUGUN), format="DD.MM.YYYY")
-            tutar = c2.number_input("Tutar (TL)", min_value=0.0, step=100.0, format="%.2f")
-            aciklama = st.text_input("Açıklama", placeholder="ör. Aralık kirası, X müşterisi faturası")
-            karsi = st.text_input("Karşı taraf (isteğe bağlı)", placeholder="ör. Ev sahibi, ABC Ltd.")
-            if st.form_submit_button("Kaydı ekle", type="primary", icon=":material/add:"):
-                try:
-                    no = planli_islem_ekle(firma_id, k["id"], yon, tarih.isoformat(), tutar, aciklama, karsi)
-                    st.session_state.planli_mesaj = ("success", f"Kayıt eklendi (#{no}). Asistana sorabilir, "
-                                                     "grafikte görebilirsiniz.")
-                except ValueError as e:
-                    st.session_state.planli_mesaj = ("error", f"Eklenemedi: {e}")
-                st.rerun()
+        if planli_formu(k, firma_id, "planli_ekle"):
+            st.rerun()
     with sag:
         html('<div class="bolum-etiket">Kayıtlarım</div>')
         kayitlar = planli_islemler(firma_id)
@@ -282,7 +309,7 @@ def planli_bolumu(k, firma_id, salt_okunur=False):
                                                       for r in kayitlar if r["id"] == i))
         if c2.button("Sil", icon=":material/delete:", width="stretch"):
             planli_islem_sil(sec, firma_id)  # yalnızca kendi firmasının kaydı silinir
-            st.session_state.planli_mesaj = ("info", f"#{sec} silindi.")
+            st.session_state.planli_mesaj = ("success", f"Planlı kayıt #{sec} silindi.")
             st.rerun()
         with c3:
             csv_indir(df, "planli_kayitlar.csv", "CSV")
@@ -310,35 +337,35 @@ def asistan_bolumu(k, firma_id):
                 with st.chat_message("assistant", avatar=ASISTAN_AVATAR):
                     st.markdown(f"Merhaba, {k['ad']}. Ödemeleriniz, vergi ve primleriniz, maaşlar, faturalar ve "
                                 "planladığınız tahsilatlar hakkında soru sorabilirsiniz; finansal sağlık puanınızı, "
-                                "müşteri dağılımınızı ve “satışlar düşerse ne olur?” gibi senaryoları da sorabilirsiniz. Aşağıdaki sık sorulan "
-                                "sorulardan biriyle başlayabilir ya da kendi sorunuzu yazabilirsiniz.")
+                                "müşteri dağılımınızı ve “satışlar düşerse ne olur?” gibi senaryoları da sorabilirsiniz. "
+                                "Yazma alanının üstündeki hazır sorulardan biriyle başlayabilir ya da kendi sorunuzu "
+                                "yazabilirsiniz.")
             for m in st.session_state.mesajlar:  # önceki mesajları yeniden çiz
                 with st.chat_message(m["rol"], avatar=ASISTAN_AVATAR if m["rol"] == "assistant" else KULLANICI_AVATAR):
                     st.write(m["metin"])
                     if m.get("kaynak"):
                         st.caption(m["kaynak"])
 
-            # Butonlar sohbet kutusunun İÇİNDE, son mesajın altında: kutunun altında yalnızca yazma alanı kalır,
-            # böylece asistan (yazma alanı dahil) sayfa açılır açılmaz ekrana sığar.
-            # Asistan bir soru sorduysa (LangGraph interrupt) sonraki mesaj o soruya CEVAP olarak gider.
-            soru = None
-            html(f'<div class="bolum-etiket">{"Hızlı cevap" if bekleyen else "Sık sorulanlar"}</div>')
-            with st.container(horizontal=True, gap="small", key="oneriler"):
-                if bekleyen and bekleyen.get("tur") == "onay":  # onay sorusunda butonlar da var
-                    if st.button("Evet", key="evet", icon=":material/check:"):
-                        soru = "evet"
-                    if st.button("Hayır", key="hayir", icon=":material/close:"):
-                        soru = "hayır"
-                elif bekleyen:
-                    if st.button("Vazgeç", key="vazgec", icon=":material/undo:"):
-                        soru = "vazgeç"
-                else:
-                    for i, oneri in enumerate(ONERILER):
-                        if st.button(oneri, key=f"oneri_{i}"):
-                            soru = oneri
-                    if st.session_state.mesajlar:
-                        st.button("Sohbeti temizle", key="temizle", icon=":material/restart_alt:",
-                                  on_click=sohbet_temizle)
+        # Hazır sorular sohbet kutusunun DIŞINDA, yazma alanının hemen üstünde sabit: önceden kutunun içinde
+        # son mesajın altındaydı; yeni mesaj yazılınca cevap gelene kadar mesajların üstünde kalıyordu.
+        # Asistan bir soru sorduysa (LangGraph interrupt) sonraki mesaj o soruya CEVAP olarak gider.
+        soru = None
+        with st.container(horizontal=True, gap="small", key="oneriler"):
+            if bekleyen and bekleyen.get("tur") == "onay":  # onay sorusunda butonlar da var
+                if st.button("Evet", key="evet", icon=":material/check:"):
+                    soru = "evet"
+                if st.button("Hayır", key="hayir", icon=":material/close:"):
+                    soru = "hayır"
+            elif bekleyen:
+                if st.button("Vazgeç", key="vazgec", icon=":material/undo:"):
+                    soru = "vazgeç"
+            else:
+                if st.session_state.mesajlar:  # şeridin başında: yana kaydırmadan görünsün
+                    st.button("Temizle", key="temizle", icon=":material/restart_alt:", help="Sohbeti temizle",
+                              on_click=sohbet_temizle)
+                for i, (etiket, oneri) in enumerate(ONERILER):
+                    if st.button(etiket, key=f"oneri_{i}", help=oneri):
+                        soru = oneri
 
         ipucu = "Cevabınızı yazın (iptal için: vazgeç)" if bekleyen else "Sorunuzu yazın…"
         yazilan = st.chat_input(ipucu, key="sohbet_girdi")
@@ -426,22 +453,22 @@ def grafik_bolumu(firma_id, df, pencere):
 
 
 # ---------- 2d) YAKLAŞAN ÖDEMELER ----------
-def yaklasan_bolumu(firma_id, satirlar):
-    """Ödenmemiş yükümlülükler + kullanıcının planlı ödemeleri, en yakın tarihten (gecikenler en üstte)."""
+def yaklasan_bolumu(firma_id, satirlar, k=None):
+    """Ödenmemiş yükümlülükler + kullanıcının planlı ödeme ve tahsilatları, en yakın tarihten (gecikenler en
+    üstte). k verilirse (firma yetkilisi) kartın altında 'Planlı kayıt ekle' düğmesi çıkar."""
     bugun = date.fromisoformat(BUGUN)
-    kalemler = [(s["son_odeme_tarihi"], s["tur"], donem_tr(s["donem"]), s["tutar_tl"])
+    kalemler = [(s["son_odeme_tarihi"], s["tur"], donem_tr(s["donem"]), s["tutar_tl"], "Gider")
                 for s in satirlar if s["durum"] != "Ödendi"]
-    kalemler += [(p["tarih"], p["aciklama"], "Planlı ödeme", p["tutar_tl"])
-                 for p in planli_islemler(firma_id) if p["yon"] == "Gider" and p["tarih"] >= BUGUN]
+    kalemler += [(p["tarih"], p["aciklama"], "Planlı tahsilat" if p["yon"] == "Gelir" else "Planlı ödeme",
+                  p["tutar_tl"], p["yon"]) for p in planli_islemler(firma_id) if p["tarih"] >= BUGUN]
     kalemler.sort()
     with st.container(key="yaklasan_kart"):
-        kart_basligi("Yaklaşan ödemeler", "Ödenmemiş vergi/prim ve planlı ödemeleriniz",
+        kart_basligi("Yaklaşan ödeme ve tahsilatlar", "Vergi/prim borçları ve sizin eklediğiniz planlı kayıtlar",
                      f"{len(kalemler)} kalem" if kalemler else "")
         if not kalemler:
-            st.caption("Bekleyen ödeme yok.")
-            return
+            st.caption("Bekleyen ödeme ya da tahsilat yok.")
         parcalar = []
-        for tarih, tur, aciklama, tutar in kalemler[:6]:
+        for tarih, tur, aciklama, tutar, yon in kalemler[:6]:
             gun = (date.fromisoformat(tarih) - bugun).days
             if gun < 0:
                 kalan, ton = f"{-gun} gün gecikti", "kotu"
@@ -449,13 +476,21 @@ def yaklasan_bolumu(firma_id, satirlar):
                 kalan, ton = "Bugün", "uyari"
             else:
                 kalan, ton = f"{gun} gün kaldı", "uyari" if gun <= 7 else ""
+            if yon == "Gelir":  # tahsilat: para GİRİŞİ, yeşil ve "+" ile
+                ton = "iyi"
             parcalar.append(f'<div class="odeme"><div class="tur">{escape(tur)}</div>'
-                            f'<div class="tutar">{tl(tutar)}</div>'
-                            f'<div class="tarih">{escape(aciklama)} · Son tarih {tarih_tr(tarih)}</div>'
-                            f'<div class="kalan {ton}">{kalan}</div></div>')
-        html("".join(parcalar))
+                            f'<div class="tutar{" giris" if yon == "Gelir" else ""}">'
+                            f'{"+" if yon == "Gelir" else ""}{tl(tutar)}</div>'
+                            f'<div class="tarih">{escape(aciklama)} · {"Tarih" if yon == "Gelir" else "Son tarih"} '
+                            f'{tarih_tr(tarih)}</div><div class="kalan {ton}">{kalan}</div></div>')
+        if parcalar:
+            html("".join(parcalar))
         if len(kalemler) > 6:
-            st.caption(f"+{len(kalemler) - 6} kalem daha · tamamı Yükümlülükler sekmesinde")
+            st.caption(f"+{len(kalemler) - 6} kalem daha · tamamı Yükümlülükler ve Planlı kayıtlar sekmelerinde")
+        if k:  # firma yetkilisi: listenin altında hızlı ekleme (pencere açılır)
+            if st.button("Planlı ödeme / tahsilat ekle", key="yaklasan_ekle", icon=":material/add_circle:",
+                         width="stretch"):
+                planli_penceresi(k, firma_id)
 
 
 # ---------- 2e) NAKİT AKIŞ TABLOSU ve HAREKET DÖKÜMÜ (hocanın Excel'i: N.AKIŞI ve HAREKET sayfaları) ----------
@@ -618,6 +653,19 @@ def cari_bolumu(firma_id):
                                 "Yürüyen toplam": st.column_config.TextColumn(alignment="right")})
 
 
+def saglik_karti(firma_id):
+    """Ana sayfa kartı: puan halkası + 5 bileşen. Ayrıntılı göstergeler alttaki 'Finansal sağlık' sekmesinde."""
+    with st.container(key="saglik_kart"):
+        g = gostergeler(firma_id)
+        ton = "yesil" if g["puan"] >= 60 else "kirmizi" if g["puan"] < 40 else ""
+        kart_basligi("Finansal sağlık", f"Son {g['ay_sayisi']} ayın hareketlerinden hesaplanan puan",
+                     f"{g['puan']} / 100 · {g['etiket']}", ton)
+        st.write("")
+        html(saglik_html(g, ozet=True))
+        st.caption("Demo göstergedir, resmî kredi notu değildir. Net marj, büyüme ve nakit dayanıklılığı gibi "
+                   "ayrıntılar alttaki “Finansal sağlık” sekmesinde.")
+
+
 def saglik_bolumu(firma_id):
     g = gostergeler(firma_id)
     html(saglik_html(g))
@@ -754,6 +802,9 @@ def firma_paneli(k, goruntulenen=None):
          f'<div class="unvan">{escape(g["unvan"])}</div><div class="meta">{escape(meta)}</div></div>'
          f'<div class="sag"><b>{bugun_tr()}</b><br>{escape(k["ad"])}</div></div>')
 
+    mesaj = st.session_state.pop("planli_mesaj", None)  # planlı kayıt eklendi/silindi: her yerden görünsün
+    if mesaj:
+        st.toast(mesaj[1], icon=":material/check_circle:")
     satirlar = yukumlulukler(firma_id)
     bu_ay = [s for s in satirlar if s["son_odeme_tarihi"][:7] == BUGUN[:7] and s["durum"] != "Ödendi"]
     geciken = [s for s in satirlar if s["durum"] == "Gecikti"]
@@ -768,6 +819,9 @@ def firma_paneli(k, goruntulenen=None):
             firma_dosyasi_bolumu(firma_id, firma)
         else:
             asistan_bolumu(k, firma_id)
+        # Sol sütun asistandan sonra boş kalıyordu (sağ sütun ~2 kat uzundu): sağlık puanı + yaklaşanlar burada
+        saglik_karti(firma_id)
+        yaklasan_bolumu(firma_id, satirlar, None if salt_okunur else k)
     with sag:
         with st.container(key="uyari_kart"):
             liste_u = uyarilar(firma_id)
@@ -792,19 +846,17 @@ def firma_paneli(k, goruntulenen=None):
             kpi(c4, f"Net durum · {pencere.lower()}", ("+" if net > 0 else "") + kisa_tl(net),
                 "Gelir giderden fazla" if net >= 0 else "Gider gelirden fazla", "iyi" if net >= 0 else "kotu")
         grafik_bolumu(firma_id, df, pencere)
-        yaklasan_bolumu(firma_id, satirlar)
 
     st.write("")
     with st.container(key="alt_kart"):
         liste = hareketler(firma_id)
-        t0, th, tk, tc, ta, ts, tn, tr, t1, t2, t3 = st.tabs([
-            ":material/table_chart: Nakit akış", ":material/list_alt: Hareketler",
+        t0, t2, th, tk, tc, ta, ts, tn, tr, t1, t3 = st.tabs([
+            ":material/table_chart: Nakit akış", ":material/event: Planlı kayıtlar", ":material/list_alt: Hareketler",
             ":material/calendar_month: Ödeme takvimi", ":material/groups: Cari hesaplar",
             ":material/request_quote: Alacaklar",
             ":material/monitor_heart: Finansal sağlık", ":material/tune: Senaryo",
             ":material/picture_as_pdf: Aylık rapor",
-            ":material/receipt_long: Yükümlülükler", ":material/event: Planlı kayıtlar",
-            ":material/outgoing_mail: Talepler"])
+            ":material/receipt_long: Yükümlülükler", ":material/outgoing_mail: Talepler"])
         with t0:
             nakit_bolumu(g, liste)
         with th:
@@ -1034,6 +1086,10 @@ def yan_menu(k):
             html('<div class="yan-bolum">Firma</div>' + "".join(
                 f'<div class="yan-satir"><span class="s">{a}</span><span class="d">{escape(str(d))}</span></div>'
                 for a, d in satir if d))
+            html('<div class="yan-bolum">Hızlı işlem</div>')
+            if st.button("Planlı kayıt ekle", key="yan_planli", icon=":material/add_circle:", type="primary",
+                         width="stretch", help="Kira, taksit, beklenen müşteri ödemesi gibi kendi kayıtlarınızı ekleyin"):
+                planli_penceresi(k, k["firma_id"])
             html('<div class="yan-bolum">Rapor</div>')
             rapor_dugmesi(k["firma_id"], varsayilan_ay(), "yan_rapor", f"{donem_tr(varsayilan_ay())} raporu (PDF)")
         elif st.session_state.get("acik_firma"):
