@@ -24,7 +24,7 @@ from pathlib import Path
 
 import requests
 
-from app.config import BELGE_DIR, BUGUN, N8N_URL
+from app.config import BELGE_DIR, BUGUN, N8N_ANAHTAR_BASLIGI, N8N_URL, N8N_WEBHOOK_ANAHTARI
 from app.db import baglan, calistir, firma_bilgisi, kayitli_eposta
 from app.kayit import donem_tr, tarih_tr, tl
 from app.onay import denetim_yaz, tablolari_kur
@@ -44,15 +44,20 @@ def _n8n(yol, veri, ek=None):
     """n8n webhook'unu çağırır. Ek dosya varsa multipart (n8n onu e-posta ekine çevirir), yoksa JSON.
     Başarısızsa RuntimeError (çağıran 'Kuyrukta' bırakır)."""
     url = f"{N8N_URL}/webhook/{yol}"
+    # Paylaşılan anahtar: n8n webhook'u (headerAuth) bu başlığı tutmayan isteği 403 ile reddeder.
+    basliklar = {N8N_ANAHTAR_BASLIGI: N8N_WEBHOOK_ANAHTARI} if N8N_WEBHOOK_ANAHTARI else {}
     try:
         if ek:
-            r = requests.post(url, data=veri, files={"ek": ek}, timeout=ZAMAN_ASIMI)
+            r = requests.post(url, data=veri, files={"ek": ek}, headers=basliklar, timeout=ZAMAN_ASIMI)
         else:
-            r = requests.post(url, json=veri, timeout=ZAMAN_ASIMI)
+            r = requests.post(url, json=veri, headers=basliklar, timeout=ZAMAN_ASIMI)
     except requests.RequestException as e:
         raise RuntimeError(f"n8n'e ulaşılamadı ({N8N_URL})") from e
     if not r.ok:
-        ipucu = " — akış yayında (aktif) değil olabilir" if r.status_code == 404 else ""
+        ipucu = {404: " — akış yayında (aktif) değil olabilir",
+                 401: " — webhook anahtarı eksik (.env N8N_WEBHOOK_ANAHTARI; bkz. n8n/kur.sh)",
+                 403: " — webhook anahtarı eşleşmiyor (.env N8N_WEBHOOK_ANAHTARI ile n8n'deki aynı olmalı; "
+                      "n8n kapalıyken bash n8n/kur.sh)"}.get(r.status_code, "")
         raise RuntimeError(f"n8n hata verdi: HTTP {r.status_code}{ipucu}")
     return r
 

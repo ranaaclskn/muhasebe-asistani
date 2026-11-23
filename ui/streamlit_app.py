@@ -17,9 +17,9 @@ from app.akis import devam, sor  # noqa: E402
 from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
 from app.emirler import GORUSME_TEKLIFI, teklif_onayi  # noqa: E402
-from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri, firmalar,  # noqa: E402
-                    erisilebilir_firma, kayitli_eposta, kullanici_dogrula, planli_islem_ekle, planli_islem_sil,
-                    planli_islemler, talep_karar, yukumlulukler)
+from app.db import (KILIT_DAKIKA, YONLER, GirisKilitli, bekleyen_talepler, erisilebilir_firma,  # noqa: E402
+                    firma_bilgisi, firma_talepleri, firmalar, giris_durumu, kayitli_eposta, kullanici_dogrula,
+                    planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar, yukumlulukler)
 from app.kayit import AYLAR, donem_tr, tarih_tr, tl  # noqa: E402
 from app.onay import firma_dosyasi_ac, onay_ver, son_denetim, talep_gonder  # noqa: E402
 from app.analiz import (cari_ekstre, cari_ozet, gostergeler, senaryo, takvim_olaylari, uyarilar,  # noqa: E402
@@ -208,13 +208,19 @@ def giris_ekrani():
                     eposta = st.text_input("E-posta", placeholder="ornek@demo.local")
                     sifre = st.text_input("Şifre", type="password")
                     if st.form_submit_button("Giriş yap", type="primary", width="stretch"):
-                        kullanici = kullanici_dogrula(eposta, sifre)
+                        try:  # deneme sınırı db.kullanici_dogrula'da (veritabanında sayılır)
+                            kullanici = kullanici_dogrula(eposta, sifre)
+                        except GirisKilitli as e:
+                            st.error(str(e), icon=":material/lock_clock:")
+                            st.stop()
                         if kullanici:
                             st.session_state.kullanici = kullanici
                             st.session_state.mesajlar = []
                             st.rerun()
                         else:
-                            st.error("E-posta veya şifre hatalı.")
+                            kalan, _ = giris_durumu(eposta)
+                            st.error("E-posta veya şifre hatalı." + (f" {kalan} deneme hakkınız kaldı; sonra hesap "
+                                     f"{KILIT_DAKIKA} dakika kilitlenir." if 0 < kalan <= 2 else ""))
                 with st.expander("Demo hesapları"):
                     st.markdown("Şifre hepsinde `Demo2026!`  \n"
                                 "Firma: `gida@demo.local`, `yazilim@demo.local`, `tekstil@demo.local`  \n"

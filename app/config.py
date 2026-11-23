@@ -19,6 +19,10 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:1.5b")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "embeddinggemma")
 N8N_URL = os.getenv("N8N_URL", "http://localhost:5678")
+# n8n webhook'larının paylaşılan anahtarı: her istekte X-Muhasebe-Anahtar başlığıyla gider, n8n eşleşmeyeni 403 ile
+# reddeder. n8n/kur.sh yoksa üretip .env'e ve n8n'e yazar. Kodda ya da GitHub'da durmaz.
+N8N_WEBHOOK_ANAHTARI = os.getenv("N8N_WEBHOOK_ANAHTARI", "")
+N8N_ANAHTAR_BASLIGI = "X-Muhasebe-Anahtar"
 
 # "Bugün" = GERÇEK tarih: son tarihi geçen ödemeler "Gecikti" sayılır, "bu ay / geçen ay" buna göre hesaplanır.
 # Sunum/test için sabit bir gün istenirse .env'e  BUGUN=2026-11-11  yazın (CLAUDE.md §6 senaryo günü).

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "MuhasebeWebhAnh1",
+    "name": "Muhasebe webhook anahtarı",
+    "type": "httpHeaderAuth",
+    "data": {
+      "name": "X-Muhasebe-Anahtar",
+      "value": "__ANAHTAR__"
+    }
+  }
+]

@@ -25,10 +25,11 @@ class SahteN8n:
     def __init__(self):
         self.istekler, self.calisiyor, self.durum_kodu = [], True, 200
 
-    def __call__(self, url, json=None, data=None, files=None, timeout=None):
+    def __call__(self, url, json=None, data=None, files=None, headers=None, timeout=None):
         if not self.calisiyor:
             raise requests.ConnectionError("bağlantı reddedildi")
-        self.istekler.append({"url": url, "veri": json or data, "ek": (files or {}).get("ek")})
+        self.istekler.append({"url": url, "veri": json or data, "ek": (files or {}).get("ek"),
+                              "basliklar": headers or {}})
         yanit = requests.Response()
         yanit.status_code = self.durum_kodu
         return yanit

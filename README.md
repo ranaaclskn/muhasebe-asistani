@@ -117,6 +117,8 @@ ZAMANLAYICI (n8n Schedule Trigger → Execute Command → n8n/gorev.sh)
 **Tasarım ilkesi: "LLM yorumlar, kod denetler."** Küçük model esnek Türkçeyi anlamakta iyidir ama kesin kurallarda hata yapabilir. Bu yüzden:
 - Model çıktısı şemaya göre doğrulanır, parametreler türlerine göre yerine oturtulur.
 - Kesin kalıplar ("bu ay ödenecek", "son 3 ay", "gecikmiş", "kaç çalışan") kod kurallarıyla düzeltilir.
+- **Girişte deneme sınırı:** bir e-posta için 15 dakika içinde 5 hatalı denemeden sonra hesap 15 dakika girişe kapanır; kilit süresince doğru şifre de kabul edilmez. Sayaç veritabanındadır (`giris_denemeleri`), sayfayı yenilemek sıfırlamaz; başarılı giriş sıfırlar. Kayıtlı olmayan e-postalar da aynı şekilde sayılır ve aynı sürede cevap alır (e-postanın kayıtlı olup olmadığı anlaşılmaz). Ödünleşim: biri bilerek yanlış şifre girerek bir hesabı 15 dakika kilitleyebilir (`app/db.py`, `AZAMI_DENEME`, `KILIT_DAKIKA`).
+- **n8n webhook anahtarı:** üç webhook (`talep-onay`, `hatirlatma`, `aylik-rapor`) yalnızca `X-Muhasebe-Anahtar` başlığında doğru anahtarı taşıyan isteği kabul eder, gerisini 403 ile reddeder; böylece bilgisayardaki başka bir program uygulama adına e-posta gönderemez. Anahtar `.env`'de (`N8N_WEBHOOK_ANAHTARI`) durur, GitHub'a gitmez; `n8n/kur.sh` yoksa üretip `.env`'e ve n8n'e yazar. Anahtar eşleşmezse e-posta kuyrukta bekler ve panel nedenini söyler.
 - **Muhasebeci görünümü salt okunurdur:** muhasebeci portföyden bir firmanın panelini açabilir; yetki her çizimde koddan denetlenir (`db.erisilebilir_firma`: firma yetkilisi yalnızca kendi firmasını, muhasebeci kayıtlı firmaları görür), asistan ve kayıt ekleme/silme bu görünümde kapalıdır ve her açılış denetim kaydına yazılır (`onay.firma_dosyasi_ac`).
 - Analiz soruları (sağlık puanı, cari, senaryo, uyarılar) modele gitmeden **kodla** tanınır ve cevaplanır (`app/analiz_sorulari.py`); rakamlar paneldeki sekmelerle aynı fonksiyonlardan gelir. "2 kişi işe alırsam" gibi koşullu cümleler senaryodur, geçmiş işe alım (bordro) sorusu değildir.
 - Kayıt cevaplarında uydurma sayı, eksik ana rakam ya da "ödendi/ödenmedi" çelişkisi varsa model cevabı atılır ve şablon cevap kullanılır.
@@ -196,6 +198,7 @@ python scripts/05_hatirlatma.py          # her firmaya, gecikmiş + 3 gün için
 |---|---|
 | `n8n/akislar.json` | Beş akış: `Webhook (talep-onay)` → `Send Email` (belge ekli), `Webhook (hatirlatma)` → `Send Email`, `Webhook (aylik-rapor)` → `Send Email` (PDF ekli, muhasebeci CC); zamanlayıcılar: `Schedule (her sabah 09:00)` → `Execute Command` (hatırlatma), `Schedule (her ayın 1'i 08:30)` → `Execute Command` (aylık rapor) |
 | `n8n/gorev.sh` | Zamanlayıcının çağırdığı tek giriş noktası: yalnızca `hatirlatma` ve `aylik-rapor` görevlerini çalıştırır (başka komut reddedilir), çıktıyı `data/gorevler.log`'a da yazar |
+| `n8n/webhook_anahtari.json.ornek` | Webhook'ların başlık kimliği (`X-Muhasebe-Anahtar`); değer `kur.sh` tarafından `.env`'den doldurulur, depoda anahtar yoktur |
 | `n8n/test_posta_kimligi.json` | n8n SMTP kimliği: `127.0.0.1:1025`, şifresiz (yalnız test posta kutusu için) |
 | `n8n/kur.sh`, `n8n/baslat.sh` | İçe aktarma/yayınlama ve n8n'i yalnız `127.0.0.1`'de başlatma |
 | `scripts/test_posta_kutusu.py` | Ek paket gerektirmeyen küçük SMTP sunucusu; e-postaları `.eml` olarak kaydeder |
@@ -271,7 +274,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 257 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 276 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, güvenlik, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -293,7 +296,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 257/257 |
+| Birim testleri (`pytest`) | 276/276 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -307,7 +310,7 @@ Not: Test seti küçüktür (15 soru) ve prompt'lar bu sorular gözetilerek iyil
 muhasebe-asistani/
 ├── app/
 │   ├── config.py        # ayarlar (.env), yollar, chunk boyutu, "bugün", gecikme zammı oranı
-│   ├── db.py            # SQLite: SORGULAR menüsü, calistir(), talepler, giriş (bcrypt), grafik verisi
+│   ├── db.py            # SQLite: SORGULAR menüsü, calistir(), talepler, giriş (bcrypt + deneme sınırı), grafik verisi
 │   ├── niyet.py         # soru → {niyet, sorgu, parametreler} + kod kuralları
 │   ├── kayit.py         # SQL sonucu → cevap (toplam Python'da, şablon/denetim), gecikme zammı hesabı
 │   ├── bordro.py        # çalışan / maaş / bordro soruları
@@ -397,7 +400,8 @@ muhasebe-asistani/
 - [x] Asistan analizlere bağlandı: sağlık puanı, cari, senaryo ve uyarı soruları sohbetten cevaplanır
 - [x] Aylık yönetici raporu (PDF): firma panelinden, muhasebeci portföyünden ve komut satırından
 - [x] Muhasebecinin firmaya girmesi: portföyden firmanın paneli salt okunur açılır, açılış denetime yazılır
-- [x] pytest birim testleri (257 test)
+- [x] Güvenlik: girişte deneme sınırı, n8n webhook'larında paylaşılan anahtar
+- [x] pytest birim testleri (276 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [x] n8n zamanlayıcısı: her sabah 09:00 ödeme hatırlatması, her ayın 1'i aylık PDF raporu e-postası
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)

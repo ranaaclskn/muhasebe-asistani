@@ -8,6 +8,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "talep-onay",
+          "authentication": "headerAuth",
           "responseMode": "lastNode",
           "options": {}
         },
@@ -19,7 +20,13 @@
           0,
           0
         ],
-        "webhookId": "255b3cfd-df21-59f0-9159-b15e8fcb7d97"
+        "webhookId": "255b3cfd-df21-59f0-9159-b15e8fcb7d97",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "MuhasebeWebhAnh1",
+            "name": "Muhasebe webhook anahtarı"
+          }
+        }
       },
       {
         "parameters": {
@@ -78,6 +85,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "hatirlatma",
+          "authentication": "headerAuth",
           "responseMode": "lastNode",
           "options": {}
         },
@@ -89,7 +97,13 @@
           0,
           0
         ],
-        "webhookId": "7820e62d-a415-591a-914e-241b2c69c50d"
+        "webhookId": "7820e62d-a415-591a-914e-241b2c69c50d",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "MuhasebeWebhAnh1",
+            "name": "Muhasebe webhook anahtarı"
+          }
+        }
       },
       {
         "parameters": {
@@ -147,6 +161,7 @@
         "parameters": {
           "httpMethod": "POST",
           "path": "aylik-rapor",
+          "authentication": "headerAuth",
           "responseMode": "lastNode",
           "options": {}
         },
@@ -158,7 +173,13 @@
           0,
           0
         ],
-        "webhookId": "a2273cab-5090-538d-a3b2-0459cc14fb2d"
+        "webhookId": "a2273cab-5090-538d-a3b2-0459cc14fb2d",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "MuhasebeWebhAnh1",
+            "name": "Muhasebe webhook anahtarı"
+          }
+        }
       },
       {
         "parameters": {

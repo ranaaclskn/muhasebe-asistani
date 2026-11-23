@@ -9,7 +9,8 @@ Kontrol (proje klasöründen):  python -m app.db
 import json
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
+from functools import cache
 
 import bcrypt
 
@@ -470,17 +471,95 @@ def planli_islem_sil(islem_id, firma_id):
 
 
 # ---------- Arayüz (Adım 9) için yardımcılar ----------
-def kullanici_dogrula(eposta, sifre):
-    """E-posta + şifre doğruysa kullanıcı bilgisini (sifre_hash HARİÇ) döndür, değilse None."""
+# ---------- Giriş deneme sınırı (kaba kuvvetle şifre denemeye karşı) ----------
+# Bir e-posta için son başarılı girişten sonraki hatalı denemeler sayılır: PENCERE dakika içinde AZAMI_DENEME
+# hatalı denemeden sonra hesap KILIT_DAKIKA boyunca girişe kapanır. Kayıt veritabanında tutulur: sayfayı
+# yenilemek ya da yeni sekme açmak sayacı sıfırlamaz.
+AZAMI_DENEME, PENCERE_DAKIKA, KILIT_DAKIKA = 5, 15, 15
+GIRIS_SEMA = """
+CREATE TABLE IF NOT EXISTS giris_denemeleri (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    eposta TEXT NOT NULL,
+    basarili INTEGER NOT NULL,          -- 1 başarılı, 0 hatalı
+    tarih TEXT NOT NULL                 -- ISO, saniye hassasiyetinde
+);
+CREATE INDEX IF NOT EXISTS ix_giris_eposta ON giris_denemeleri(eposta, tarih);
+"""
+@cache
+def _sahte_hash():
+    """Kullanıcı yoksa da bcrypt çalışsın: cevap süresinden "bu e-posta kayıtlı mı" anlaşılmasın.
+    (Gerçek hash'lerle aynı maliyet; ilk ihtiyaçta bir kez üretilir.)"""
+    return bcrypt.hashpw(b"kayitli-olmayan-kullanici", bcrypt.gensalt(rounds=12))
+
+
+class GirisKilitli(Exception):
+    """Çok fazla hatalı deneme: hesap geçici olarak girişe kapalı. `dakika`: kalan süre (yukarı yuvarlanmış)."""
+    def __init__(self, dakika):
+        super().__init__(f"Çok fazla hatalı deneme. {dakika} dakika sonra tekrar deneyin.")
+        self.dakika = dakika
+
+
+def _simdi():
+    return datetime.now()
+
+
+def giris_durumu(eposta, simdi=None):
+    """(kalan_deneme, kilit_bitis) — kilit yoksa kilit_bitis None. Yalnızca son başarılı girişten sonraki ve
+    son PENCERE dakikadaki hatalı denemeler sayılır."""
+    simdi = simdi or _simdi()
+    eposta = (eposta or "").strip().lower()
+    con = baglan()
+    try:
+        con.executescript(GIRIS_SEMA)
+        son_basari = con.execute("SELECT MAX(tarih) FROM giris_denemeleri WHERE eposta = ? AND basarili = 1",
+                                 (eposta,)).fetchone()[0] or ""
+        alt = max(son_basari, (simdi - timedelta(minutes=PENCERE_DAKIKA)).isoformat(timespec="seconds"))
+        hatalar = [r[0] for r in con.execute(
+            "SELECT tarih FROM giris_denemeleri WHERE eposta = ? AND basarili = 0 AND tarih > ? ORDER BY tarih",
+            (eposta, alt))]
+    finally:
+        con.close()
+    if len(hatalar) >= AZAMI_DENEME:
+        bitis = datetime.fromisoformat(hatalar[AZAMI_DENEME - 1]) + timedelta(minutes=KILIT_DAKIKA)
+        if bitis > simdi:
+            return 0, bitis
+        return AZAMI_DENEME, None  # kilit süresi doldu: yeniden tam hak
+    return AZAMI_DENEME - len(hatalar), None
+
+
+def _deneme_yaz(eposta, basarili, simdi):
+    con = baglan()
+    try:
+        con.executescript(GIRIS_SEMA)
+        con.execute("INSERT INTO giris_denemeleri (eposta, basarili, tarih) VALUES (?, ?, ?)",
+                    (eposta, int(basarili), simdi.isoformat(timespec="seconds")))
+        con.execute("DELETE FROM giris_denemeleri WHERE tarih < ?",  # tablo büyümesin: 1 günden eskiler
+                    ((simdi - timedelta(days=1)).isoformat(timespec="seconds"),))
+        con.commit()
+    finally:
+        con.close()
+
+
+def kullanici_dogrula(eposta, sifre, simdi=None):
+    """E-posta + şifre doğruysa kullanıcı bilgisini (sifre_hash HARİÇ) döndür, değilse None.
+    Hesap çok fazla hatalı deneme yüzünden kilitliyse şifreye BAKMADAN GirisKilitli fırlatır."""
+    simdi = simdi or _simdi()
+    eposta = (eposta or "").strip().lower()
+    _, kilit = giris_durumu(eposta, simdi)
+    if kilit:
+        raise GirisKilitli(max(1, -(-int((kilit - simdi).total_seconds()) // 60)))
     con = baglan()
     try:
         k = con.execute(
             "SELECT k.id, k.eposta, k.sifre_hash, k.rol, k.firma_id, k.ad, f.unvan "
             "FROM kullanicilar k LEFT JOIN firmalar f ON f.id = k.firma_id "
-            "WHERE k.eposta = ?", (eposta.strip().lower(),)).fetchone()
+            "WHERE k.eposta = ?", (eposta,)).fetchone()
     finally:
         con.close()
-    if k and bcrypt.checkpw(sifre.encode("utf-8"), k["sifre_hash"].encode("utf-8")):
+    hash_ = k["sifre_hash"].encode("utf-8") if k else _sahte_hash()
+    dogru = bcrypt.checkpw((sifre or "").encode("utf-8"), hash_) and k is not None
+    _deneme_yaz(eposta, dogru, simdi)  # kayıtlı olmayan e-postalar da sayılır (aynı cevap, aynı sınır)
+    if dogru:
         kullanici = dict(k)
         del kullanici["sifre_hash"]  # hash oturuma bile taşınmaz
         return kullanici
