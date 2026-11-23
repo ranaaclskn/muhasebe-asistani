@@ -14,6 +14,7 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from app.akis import devam, sor  # noqa: E402
+from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
 from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri,  # noqa: E402
                     kullanici_dogrula, planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar,
@@ -485,9 +486,41 @@ def onayla(talep_id, muhasebeci_id):
         return ("error", f"#{talep_id} onaylanamadı: {e}")
     if not sonuc["ok"]:
         return ("error", f"#{talep_id} gönderime alınamadı: {sonuc['hata']}")
-    g = sonuc["gonderim"]
-    hedef = f" → {g['dosya']} · {g['eposta']}" if g.get("dosya") else ""
-    return ("success", f"#{talep_id} onaylandı ve gönderime alındı{hedef}")
+    # Onaydan SONRA e-postayı n8n gönderir (app/bildirim.py). n8n kapalıysa gönderim kuyrukta kalır.
+    sonuclar = kuyrugu_isle(talep_id)
+    if not sonuclar:  # zaten gönderilmiş (tekrar istek)
+        return ("info", f"#{talep_id} daha önce işlenmiş; yeni e-posta gönderilmedi.")
+    r = sonuclar[0]
+    if r["ok"]:
+        return ("success", f"#{talep_id} onaylandı ve e-posta n8n ile gönderildi → {r['eposta']}")
+    return ("warning", f"#{talep_id} onaylandı, ama e-posta henüz gönderilemedi: {r['hata']}. "
+                       "Gönderim kaybolmadı; aşağıdaki “E-posta kuyruğu” bölümünden tekrar deneyebilirsiniz.")
+
+
+def kuyruk_bolumu():
+    """Onaylanmış ama e-postası henüz gitmemiş talepler (n8n kapalıyken onaylananlar)."""
+    bekleyen = kuyrukta_bekleyenler()
+    acik = n8n_calisiyor()
+    with st.container(key="yaklasan_kart"):
+        kart_basligi("E-posta kuyruğu", "Onaylanmış, e-postası n8n ile gönderilmeyi bekleyen talepler",
+                     "n8n açık" if acik else "n8n kapalı", "yesil" if acik else "kirmizi")
+        if not bekleyen:
+            st.caption("Kuyrukta bekleyen e-posta yok.")
+            return
+        st.dataframe([{"Talep": f"#{b['talep_id']}", "Firma": b["unvan"], "Özet": b["ozet"],
+                       "Alıcı": b["eposta"] or "kayıtlı adres", "Onay zamanı": b["tarih"]} for b in bekleyen],
+                     hide_index=True, width="stretch")
+        if not acik:
+            st.caption("n8n kapalı. Başlatmak için proje klasöründe: bash n8n/baslat.sh")
+        if st.button(f"Kuyruktaki {len(bekleyen)} e-postayı gönder", icon=":material/send:", type="primary",
+                     disabled=not acik):
+            sonuclar = kuyrugu_isle()
+            basarili = sum(r["ok"] for r in sonuclar)
+            hatalar = [f"#{r['talep_id']}: {r['hata']}" for r in sonuclar if not r["ok"]]
+            st.session_state.onay_mesaji = (("success" if not hatalar else "warning"),
+                                            f"{basarili} e-posta gönderildi." + (" Gönderilemeyen: " +
+                                                                                  "; ".join(hatalar) if hatalar else ""))
+            st.rerun()
 
 
 def muhasebeci_paneli(k):
@@ -497,9 +530,12 @@ def muhasebeci_paneli(k):
          '<div class="meta">Asistanın firmalardan topladığı işlem talepleri; onaylanmadan hiçbiri yapılmaz.</div></div>'
          f'<div class="sag"><b>{bugun_tr()}</b><br>{escape(k["ad"])}</div></div>')
     st.write("")
-    c1, c2, _ = st.columns([1, 1, 2])
+    kuyrukta = len(kuyrukta_bekleyenler())
+    c1, c2, c3, _ = st.columns([1, 1, 1, 1])
     kpi(c1, "Bekleyen talep", len(talepler), "Onayınızı bekliyor", "kotu" if talepler else "")
     kpi(c2, "Firma", len({t["unvan"] for t in talepler}), "Talebi olan firma sayısı")
+    kpi(c3, "E-posta kuyruğu", kuyrukta, "Gönderilmeyi bekliyor" if kuyrukta else "Bekleyen e-posta yok",
+        "kotu" if kuyrukta else "")
     st.write("")
 
     mesaj = st.session_state.pop("onay_mesaji", None)  # st.rerun sonrası sonucu göster
@@ -530,6 +566,9 @@ def muhasebeci_paneli(k):
                         talep_karar(t["id"], "Reddedildi", k["id"])
                         st.session_state.onay_mesaji = ("info", f"#{t['id']} reddedildi; hiçbir işlem yapılmadı.")
                         st.rerun()
+
+    st.write("")
+    kuyruk_bolumu()
 
     st.write("")
     with st.expander("Denetim kaydı (son 15 olay)", icon=":material/history:"):

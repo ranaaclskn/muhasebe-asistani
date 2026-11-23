@@ -1,0 +1,141 @@
+[
+  {
+    "id": "MuhasebeTalepOn1",
+    "name": "Muhasebe · Talep onay e-postası",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "talep-onay",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "9d469faf-525c-5575-a57d-27ab84e67912",
+        "name": "Talep onaylandı (webhook)",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "255b3cfd-df21-59f0-9159-b15e8fcb7d97"
+      },
+      {
+        "parameters": {
+          "fromEmail": "Muhasebe Asistanı <asistan@demo.local>",
+          "toEmail": "={{ $json.body.eposta }}",
+          "subject": "={{ $json.body.konu }}",
+          "emailFormat": "text",
+          "text": "={{ $json.body.metin }}",
+          "options": {
+            "appendAttribution": false,
+            "fileAttachments": "ek"
+          }
+        },
+        "id": "6c51c1a3-943e-5a37-ac7a-4af21f716029",
+        "name": "E-postayı gönder (ekli)",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2.1,
+        "position": [
+          260,
+          0
+        ],
+        "webhookId": "de2f710c-9417-504c-92c0-1b0f951f2a31",
+        "credentials": {
+          "smtp": {
+            "id": "MuhasebeSmtpYrl1",
+            "name": "Test posta kutusu (yerel)"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Talep onaylandı (webhook)": {
+        "main": [
+          [
+            {
+              "node": "E-postayı gönder (ekli)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "Europe/Istanbul"
+    },
+    "pinData": {}
+  },
+  {
+    "id": "MuhasebeHatirla1",
+    "name": "Muhasebe · Ödeme hatırlatma e-postası",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "hatirlatma",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "026a658d-19e5-5d3b-b759-f48a26cf0692",
+        "name": "Hatırlatma (webhook)",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "7820e62d-a415-591a-914e-241b2c69c50d"
+      },
+      {
+        "parameters": {
+          "fromEmail": "Muhasebe Asistanı <asistan@demo.local>",
+          "toEmail": "={{ $json.body.eposta }}",
+          "subject": "={{ $json.body.konu }}",
+          "emailFormat": "text",
+          "text": "={{ $json.body.metin }}",
+          "options": {
+            "appendAttribution": false
+          }
+        },
+        "id": "fc074dee-b465-56b0-980a-e65fa7811988",
+        "name": "Hatırlatma e-postası gönder",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2.1,
+        "position": [
+          260,
+          0
+        ],
+        "webhookId": "702a50eb-1b20-596d-b6de-24f847209c8a",
+        "credentials": {
+          "smtp": {
+            "id": "MuhasebeSmtpYrl1",
+            "name": "Test posta kutusu (yerel)"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Hatırlatma (webhook)": {
+        "main": [
+          [
+            {
+              "node": "Hatırlatma e-postası gönder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "Europe/Istanbul"
+    },
+    "pinData": {}
+  }
+]

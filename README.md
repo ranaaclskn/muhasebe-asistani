@@ -15,7 +15,7 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
 | "Son üç ayda ne kadar ödedim?" | Ay aralığını **kod** hesaplar, toplamı **Python** yapar | SQLite |
 | "Eylül KDV beyannamemde ödenecek tutar ne?" | Belge sorusu: arama → rerank → kaynaklı cevap | ChromaDB (RAG) |
 | "SGK primini geç ödersem ne olur?" | Ortak rehberlerden genel bilgi verilir | ChromaDB (RAG) |
-| "Son beyannamemi e-postama gönder." | Talep **"Onay bekliyor"** olarak kaydedilir, e-posta gönderilmez | Talepler tablosu |
+| "Son beyannamemi e-postama gönder." | Talep **"Onay bekliyor"** olarak kaydedilir; e-posta ancak muhasebeci onaylayınca, n8n ile ve yalnız **kayıtlı** adrese gider (belge ekli) | Talepler → n8n |
 | "Beyannamemi gönder" → *"Hangi beyanname?"* → "KDV" → *"Hangi dönem?"* → "Eylül" → *"Onaylıyor musunuz?"* → "evet" | **Çok adımlı sohbet:** eksik bilgi tek tek sorulur, özet gösterilir, onaydan sonra kayıt açılır (LangGraph `interrupt` + SQLite checkpoint; atölye 7. gün) | Talepler / planlı kayıtlar |
 | "3 numaralı talebim ne durumda?" / "Taleplerim ne oldu?" | Talep durumu sorgulama (yalnız kendi firmasının talepleri) | Talepler tablosu |
 | "Hangi hisseyi alayım?" | Nazikçe reddedilir | — |
@@ -35,7 +35,7 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
   - **Gelir–gider grafiği:** gelir sıfırın üstünde, gider altında, koyu çizgi ayın neti. Dönem seçimi (son 3 ay / son 6 ay / tümü), toplam gelir–gider–net özeti, **gider dağılımı** (vergi/prim, maaş, alış faturaları) ve tablo görünümü (CSV indirilebilir). Gelir = satış faturaları + planlı tahsilatlar; gider = alış faturaları + **net** maaşlar + vergi/prim + planlı ödemeler (maaşta net kullanılır, çünkü SGK ve muhtasar kesintileri zaten vergi/prim olarak sayılır). İleri tarihli aylar açık renkle "plan" olarak gösterilir.
   - **Yaklaşan ödemeler:** ödenmemiş vergi/prim ve planlı ödemeler tarih sırasıyla; "4 gün gecikti" (kırmızı), "5 gün kaldı" (7 gün kalınca sarı).
   - **Alt sekmeler:** yükümlülükler (durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
-- **Muhasebeci paneli:** bekleyen talep sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır, denetim kaydı tutulur.
+- **Muhasebeci paneli:** bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
 
 Kullanıcının eklediği kayıtlar muhasebecinin resmî kayıtlarından (`yukumlulukler`) **ayrı** tutulur; "bu ay ne kadar vergi ödeyeceğim" sorusu yalnız resmî kayıtlardan cevaplanır.
 
@@ -59,8 +59,13 @@ SORU YOLU (LangGraph — app/akis.py)
            └─ kapsam_disi / başka firma ─> nazik ret
      └─> logla düğümü (soru, niyet, araç, kaynaklar, cevap, süre_ms → loglar tablosu)
 
-ONAY YOLU
-  Muhasebeci paneli ─ Onayla ─> talep 'Onaylandı'   (n8n e-posta adımı: yapım aşamasında)
+ONAY YOLU (app/onay.py → app/bildirim.py → n8n)
+  Muhasebeci paneli ─ Onayla ─> tek kullanımlık token ─> gonderimler: 'Kuyrukta'
+     └─> POST localhost:5678/webhook/talep-onay (belge ek olarak) ─> n8n "Send Email" ─> 'Gönderildi', talep 'Tamamlandı'
+         n8n kapalıysa gönderim 'Kuyrukta' kalır; panelden "Kuyruktaki e-postaları gönder" ile tekrar denenir
+
+HATIRLATMA (scripts/05_hatirlatma.py → n8n)
+  Ödenmemiş: gecikmiş + son tarihine ≤3 gün kalan ─> POST /webhook/hatirlatma ─> firmanın kayıtlı adresine e-posta
 ```
 
 ### Teknoloji
@@ -76,7 +81,7 @@ ONAY YOLU
 | Agent | LangGraph (`StateGraph`) |
 | Arayüz | Streamlit (grafik: Altair) |
 | Parola | bcrypt |
-| Otomasyon | n8n (onay e-postası, yapım aşamasında) |
+| Otomasyon | n8n 2.x (onay e-postası ve ödeme hatırlatması; webhook → Send Email) |
 
 > **Model seçimi:** Proje 6 GB RAM'li, GPU'suz bir bilgisayarda geliştirildi, bu yüzden küçük modeller kullanıldı. Daha güçlü bir makinede `.env` dosyasında `LLM_MODEL=qwen2.5:7b` ve `EMBED_MODEL=bge-m3` ayarlanabilir; kod değişikliği gerekmez (embedding modeli değişirse indeksi yeniden kurun).
 
@@ -105,7 +110,7 @@ ONAY YOLU
 ### Gereksinimler
 - Python 3.11 veya üzeri
 - [Ollama](https://ollama.com) (çalışır durumda, `http://localhost:11434`)
-- (İsteğe bağlı) n8n: Docker ile `docker compose up -d` ya da Node.js ile `npx n8n`
+- (İsteğe bağlı, e-posta için) n8n: Node.js ile `npx n8n` (bkz. aşağıdaki "E-posta (n8n)" bölümü) ya da Docker ile `docker compose up -d`
 
 ### Adımlar
 
@@ -143,6 +148,41 @@ Faturalar (`data/csv/faturalar.csv`, 87 kayıt): Eylül–Ekim 2026 alış/satı
 GECIKME_ZAMMI_AYLIK=3.7
 GECIKME_ZAMMI_TARIH=13.11.2025
 ```
+
+### E-posta (n8n)
+
+Muhasebeci bir talebi onaylayınca belge e-postasını, ödeme hatırlatmalarını da **n8n** gönderir. Python yalnızca ne gönderileceğini hazırlar (`app/bildirim.py`); SMTP ayarı n8n'dedir, kodda e-posta şifresi tutulmaz. Demo adresleri (`@demo.local`) gerçek olmadığı için e-postalar bilgisayardaki **test posta kutusuna** düşer; hiçbir e-posta dışarı gitmez.
+
+Bir kez kurulum (n8n kapalıyken; SMTP kimliği ve iki akış içe aktarılır, akışlar yayınlanır):
+
+```bash
+bash n8n/kur.sh
+```
+
+Her kullanımda iki ayrı terminalde:
+
+```bash
+python scripts/test_posta_kutusu.py   # 127.0.0.1:1025 — gelen e-postalar data/posta_kutusu/*.eml
+bash n8n/baslat.sh                    # n8n: http://localhost:5678 (yalnızca bu bilgisayardan erişilir)
+```
+
+Sonra muhasebeci panelinde **Onayla**ya basın: e-posta hemen gönderilir ve test posta kutusu terminalinde görünür. n8n kapalıyken onaylanan talepler kaybolmaz; panelin **E-posta kuyruğu** bölümünde bekler ve "Kuyruktaki e-postaları gönder" ile gönderilir. Ödeme hatırlatması:
+
+```bash
+python scripts/05_hatirlatma.py --dene   # e-posta göndermeden metinleri göster
+python scripts/05_hatirlatma.py          # her firmaya, gecikmiş + 3 gün içinde son tarihi olan ödemeler
+```
+
+| Dosya | Görevi |
+|---|---|
+| `n8n/akislar.json` | İki akış: `Webhook (talep-onay)` → `Send Email` (belge ekli), `Webhook (hatirlatma)` → `Send Email` |
+| `n8n/test_posta_kimligi.json` | n8n SMTP kimliği: `127.0.0.1:1025`, şifresiz (yalnız test posta kutusu için) |
+| `n8n/kur.sh`, `n8n/baslat.sh` | İçe aktarma/yayınlama ve n8n'i yalnız `127.0.0.1`'de başlatma |
+| `scripts/test_posta_kutusu.py` | Ek paket gerektirmeyen küçük SMTP sunucusu; e-postaları `.eml` olarak kaydeder |
+
+**Gerçek e-posta göndermek için** n8n arayüzünde (Credentials) "Test posta kutusu (yerel)" kimliğini kendi SMTP hesabınızla (ör. Gmail uygulama şifresi) değiştirin ve firmaların kayıtlı adreslerini gerçek adreslerle güncelleyin; Python kodu değişmez.
+
+**Bellek:** Proje 6 GB RAM'li bir makinede geliştirildi. n8n belleği doldurunca sistem başka programları kapatabildiği için `kur.sh` ve `baslat.sh`, `systemd-run` varsa n8n'i bellek sınırlı bir "kafeste" çalıştırır (varsayılan 900 MB; `N8N_BELLEK=1200M bash n8n/baslat.sh` ile değiştirilir). Sınır aşılırsa yalnızca n8n durur. Gerekirse önce tarayıcı sekmelerini ve fazladan açık Streamlit pencerelerini kapatın.
 
 ### Arayüzü başlat
 
@@ -187,7 +227,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 130 test: niyet kuralları, kayıt cevapları, onay/token, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 138 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -209,7 +249,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 130/130 |
+| Birim testleri (`pytest`) | 138/138 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -229,6 +269,7 @@ muhasebe-asistani/
 │   ├── bordro.py        # çalışan / maaş / bordro soruları
 │   ├── emirler.py       # emir menüsü (belge gönder, planlı kayıt, görüşme) ve alan çıkarımı
 │   ├── onay.py          # insan onayı, tek kullanımlık token, denetim kaydı
+│   ├── bildirim.py      # n8n köprüsü: onay e-postası (kuyruk, tekrar deneme), ödeme hatırlatması
 │   ├── rag.py           # Chroma arama → rerank → JSON cevap → kanıt eşleştirme
 │   ├── dogrulama.py     # lexical rerank, dönem çıkarımı, kanıt/atıf doğrulama
 │   ├── akis.py          # LangGraph: niyet → {sql, rag, talep, reddet} → logla
@@ -240,6 +281,8 @@ muhasebe-asistani/
 │   ├── 01_veritabani_kur.py
 │   ├── 02_belge_uret.py
 │   ├── 03_indeksle.py
+│   ├── 05_hatirlatma.py # ödeme hatırlatma e-postaları (n8n)
+│   ├── test_posta_kutusu.py  # yerel test SMTP sunucusu (127.0.0.1:1025)
 │   ├── soru_dene.py     # geliştirici için adım adım deneme aracı
 │   ├── konsol_asistan.py, veri_goruntule.py   # terminalden sohbet ve veri görüntüleme
 │   └── tool_calling_dene.py                   # tool calling denemesi
@@ -248,7 +291,7 @@ muhasebe-asistani/
 │   └── grafik.py        # gelir–gider grafiği (Altair), aylık özet ve gider dağılımı
 ├── tests/               # pytest testleri (veritabanının geçici kopyasında, model gerekmez)
 ├── .streamlit/config.toml  # tema ve yalnızca 127.0.0.1'de çalışma ayarı
-├── n8n/                 # n8n AI Agent sistem mesajı
+├── n8n/                 # akislar.json, test_posta_kimligi.json, kur.sh, baslat.sh, AI Agent sistem mesajı
 ├── data/
 │   ├── csv/             # kurgusal veri: firmalar, kullanıcılar, yükümlülükler, faturalar, belgeler, test seti
 │   ├── belgeler/        # 02 tarafından üretilen 40 .txt belge
@@ -296,7 +339,8 @@ muhasebe-asistani/
 - [x] Streamlit arayüzü (giriş, firma paneli, muhasebeci onayı)
 - [x] Kurumsal arayüz: gelir–gider grafiği, yaklaşan ödemeler, gider dağılımı, CSV indirme
 - [x] Tahmini gecikme zammı ve gecikme zammı oranı cevabı
-- [x] pytest birim testleri (130 test)
-- [ ] n8n: onaylanan talep için e-posta, yaklaşan ödemeler için hatırlatma
+- [x] pytest birim testleri (138 test)
+- [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
+- [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)
 - [ ] Temiz kurulum provası
