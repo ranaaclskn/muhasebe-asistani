@@ -274,7 +274,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 276 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, güvenlik, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 298 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, güvenlik, ölçüm kuralları, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -290,15 +290,31 @@ python -m app.akis     # uçtan uca LangGraph akışı + talep + log
 python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiğini gösterir
 ```
 
+**Toplu ölçüm (tek komut):** test setindeki 15 soru gerçek asistana (model dahil) sorulur; niyet doğruluğu, Hit@3 ve Top1, cevap doğruluğu, başka firma verisi sızıntısı, onaysız işlem ve süre ölçülür. Ayrıntı `data/sonuclar.csv`'ye yazılır; hedef (Hit@3 ≥ %90, sızıntı 0, onaysız işlem 0) tutmazsa çıkış kodu 1'dir. Veritabanının geçici kopyasında çalışır, gerçek onay kuyruğuna talep düşmez. Ollama açık olmalı; Streamlit'i kapatın.
+
+```bash
+python scripts/04_test_calistir.py               # 15 soru, ~3-5 dakika
+```
+
+```bash
+python scripts/04_test_calistir.py --id T01,T06  # yalnızca seçilen sorular
+```
+
+Puanlama kuralları `app/olcum.py`'dedir (atölye `d6_04_eval.py` karşılığı: belge sorularında beklenen dosya aramanın ilk 3 / ilk 1 parçasında mı; kayıt sorularında beklenen kayıt kimlikleri cevabın kaynaklarında mı; tutar ve tarihler cevapta aynen geçiyor mu).
+
 **Son ölçümler** (`qwen2.5:1.5b`, CPU):
 
 | Kontrol | Sonuç |
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 276/276 |
+| Birim testleri (`pytest`) | 298/298 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
+| **Toplu ölçüm** (`scripts/04_test_calistir.py`, 15 soru, 23.11.2026) | Niyet 15/15 · **Hit@3 10/10** · Top1 3/5 · cevap 15/15 · sızıntı 0 · onaysız işlem 0 |
+| Cevap süresi (aynı ölçüm, model yüklüyken) | ortalama 2,9 sn · medyan 2,1 sn · en uzun 8,1 sn (ilk soru model yüklenirken ~30 sn) |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
+
+Top1 3/5: T06 ve T07'de beklenen beyanname aramanın ilk 3 parçasında ama 1. sırada değil (önde vergi takvimi / aynı ayın KDV beyannamesi); cevap yine doğru dosyadan verilir, çünkü beyanname soruları dosya adıyla da eşleştirilir. Test setindeki T04'ün beklenen tarihi, son ödeme günlerinin resmî tatile göre kaydırılmasından sonra 31.10.2026'dan 02.11.2026'ya güncellendi. T12'de asistan başka firmayı soran soruyu modele göndermeden kodla reddeder (niyet `baska_firma`); ölçümde kayıt niyetine eşdeğer sayılır.
 
 Not: Test seti küçüktür (15 soru) ve prompt'lar bu sorular gözetilerek iyileştirilmiştir. Arayüzde denenen farklı sorular hata bulmaya devam etmektedir; bulunan her hata kalıcı test olarak eklenir (`EK1`–`EK8` ve `tests/` altındaki pytest testleri).
 
@@ -319,6 +335,7 @@ muhasebe-asistani/
 │   ├── bildirim.py      # n8n köprüsü: onay e-postası (kuyruk, tekrar deneme), ödeme hatırlatması
 │   ├── nakit.py         # hareket dökümü ve nakit akış tablosu (kod planı, kod × ay matrisi, devir, kümülatif)
 │   ├── analiz.py        # uyarılar, ödeme takvimi, yaşlandırma, cari hesap/ekstre, finansal sağlık puanı, senaryo
+│   ├── olcum.py         # toplu ölçümün puanlama kuralları (Hit@3, Top1, cevap, sızıntı, süre)
 │   ├── rapor.py         # aylık yönetici raporu: veriyi toplar (rapor_verisi) ve PDF'e yazar (rapor_pdf, fpdf2)
 │   ├── fonts/           # DejaVu Sans (PDF'te Türkçe karakterler için)
 │   ├── analiz_sorulari.py # bu analizleri sohbetten sorulabilir yapar: soru kalıbı + kodla üretilen cevap
@@ -333,6 +350,7 @@ muhasebe-asistani/
 │   ├── 01_veritabani_kur.py
 │   ├── 02_belge_uret.py
 │   ├── 03_indeksle.py
+│   ├── 04_test_calistir.py # toplu ölçüm: test seti -> data/sonuclar.csv + özet (Hit@3, Top1, süre)
 │   ├── 05_hatirlatma.py # ödeme hatırlatma e-postaları (n8n; zamanlayıcı her sabah 09:00)
 │   ├── 06_aylik_rapor.py # tüm firmaların aylık PDF raporu (data/raporlar/)
 │   ├── test_posta_kutusu.py  # yerel test SMTP sunucusu (127.0.0.1:1025)
@@ -401,8 +419,8 @@ muhasebe-asistani/
 - [x] Aylık yönetici raporu (PDF): firma panelinden, muhasebeci portföyünden ve komut satırından
 - [x] Muhasebecinin firmaya girmesi: portföyden firmanın paneli salt okunur açılır, açılış denetime yazılır
 - [x] Güvenlik: girişte deneme sınırı, n8n webhook'larında paylaşılan anahtar
-- [x] pytest birim testleri (276 test)
+- [x] pytest birim testleri (298 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [x] n8n zamanlayıcısı: her sabah 09:00 ödeme hatırlatması, her ayın 1'i aylık PDF raporu e-postası
-- [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)
+- [x] Toplu ölçüm betiği: niyet, Hit@3, Top1, cevap doğruluğu, sızıntı, onaysız işlem, süre (`scripts/04_test_calistir.py`)
 - [ ] Temiz kurulum provası

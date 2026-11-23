@@ -2,7 +2,7 @@ id,kategori,firma_id,soru,beklenen_niyet,beklenen_kaynak,beklenen_cevap
 T01,Doğruluk,F001,Ekim SGK primi ödendi mi?,kayit,Y018,"Hayır, bekliyor: 54.364,86 TL, son ödeme 30.11.2026."
 T02,Doğruluk,F001,Bu ay toplam ne kadar vergi ve prim ödeyeceğim?,kayit,Y016;Y017;Y018;Y020,"Kasım 2026'da 4 ödeme, toplam 165.469,58 TL."
 T03,Doğruluk,F002,Ağustos KDV'sini ne zaman ödedim?,kayit,Y030,"26.09.2026'da ödendi, 87.986,56 TL."
-T04,Doğruluk,F003,Gecikmiş ödemem var mı?,kayit,Y055,"Evet: Eylül SGK primi 21.306,57 TL, son tarih 31.10.2026 idi."
+T04,Doğruluk,F003,Gecikmiş ödemem var mı?,kayit,Y055,"Evet: Eylül SGK primi 21.306,57 TL, son tarih 02.11.2026 idi."
 T05,Doğruluk,F002,En yakın son ödeme tarihi hangisi?,kayit,Y040,"Geçici vergi 2026/3: 17.11.2026, 107.718,74 TL."
 T06,Doğruluk,F001,Eylül KDV beyannamemde ödenecek KDV ne kadardı?,belge,F001_KDV_2026-09.txt,"44.307,46 TL (kaynak: F001_KDV_2026-09)."
 T07,Doğruluk,F003,Temmuz muhtasar beyannamesinde ne kadar bildirildi?,belge,F003_MUHSGK_2026-07.txt,"5.663,02 TL (kaynak: F003_MUHSGK_2026-07)."
