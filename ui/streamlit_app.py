@@ -21,7 +21,11 @@ from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri, f
                     yukumlulukler)
 from app.kayit import AYLAR, donem_tr, tarih_tr, tl  # noqa: E402
 from app.onay import onay_ver, son_denetim, talep_gonder  # noqa: E402
+from app.analiz import (cari_ekstre, cari_ozet, gostergeler, senaryo, takvim_olaylari, uyarilar,  # noqa: E402
+                        yaslandirma)
 from app.nakit import DURUMLAR, KODLAR, donem_aylari, hareketler, nakit_akis_tablosu  # noqa: E402
+from ui.analiz_gorunum import (ANALIZ_CSS, ay_adi, cari_html, saglik_html, senaryo_grafigi,  # noqa: E402
+                               takvim_html, uyarilar_html, yaslandirma_html, yaslandirma_tablo_html)
 from ui.grafik import PENCERELER, aylik_tablo, gider_dagilimi, grafik, kisa_tl  # noqa: E402
 from ui.tablolar import ay_etiketi, excel_raporu, hareket_tablosu, nakit_html, portfoy_html  # noqa: E402
 
@@ -63,7 +67,8 @@ st.markdown("""
 .kpi.iyi { border-left:3px solid var(--good); } .kpi.iyi .deger { color:var(--good); }
 
 /* Kartlar */
-.st-key-asistan_kart, .st-key-grafik_kart, .st-key-yaklasan_kart, .st-key-alt_kart, .st-key-giris_kart {
+.st-key-asistan_kart, .st-key-grafik_kart, .st-key-yaklasan_kart, .st-key-alt_kart, .st-key-giris_kart,
+.st-key-uyari_kart, .st-key-takvim_kart {
     background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; }
 .st-key-asistan_kart { border-top:3px solid var(--brand); }
 .kart-bas { display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
@@ -477,6 +482,81 @@ def hareket_bolumu(k, liste):
                "Excel dosyasında (Nakit akış sekmesindeki düğme) bu döküm filtrelenebilir ve toplamlıdır.")
 
 
+# ---------- 2f) ÖDEME TAKVİMİ, CARİ HESAPLAR, FİNANSAL SAĞLIK, SENARYO (app/analiz.py) ----------
+def firma_kisa_adi(unvan):
+    """'Demo Gıda Ltd. Şti.' -> 'Gıda' (takvimde yer kazanmak için)."""
+    parca = unvan.replace("(", " ").split()
+    return parca[1] if len(parca) > 1 and parca[0] == "Demo" else parca[0]
+
+
+def takvim_bolumu(firma_idler, anahtar, kisa_adlar=None):
+    olaylar = takvim_olaylari(firma_idler)
+    aylar = sorted({o["tarih"][:7] for o in olaylar} | {BUGUN[:7]})
+    c1, c2 = st.columns([1, 3], vertical_alignment="center")
+    ay = c1.selectbox("Ay", aylar, index=aylar.index(BUGUN[:7]), format_func=ay_adi, key=f"{anahtar}_ay",
+                      label_visibility="collapsed")
+    ayin = [o for o in olaylar if o["tarih"][:7] == ay]
+    odenecek = [o for o in ayin if o["durum"] in ("Bekliyor", "Gecikti", "Plan")]
+    geciken = sum(1 for o in ayin if o["durum"] == "Gecikti")
+    c2.markdown(f"**{len(ayin)} kayıt** · ödenmemiş {tl(round(sum(o['tutar'] for o in odenecek), 2))}"
+                + (f" · <span style='color:#b42318;font-weight:700'>{geciken} gecikmiş</span>" if geciken else ""),
+                unsafe_allow_html=True)
+    html(takvim_html(int(ay[:4]), int(ay[5:]), ayin, kisa_adlar))
+    st.caption("Kutucuklar son ödeme günleridir; üzerine gelince ayrıntı görünür. Lacivert çerçeve: bugün.")
+
+
+def cari_bolumu(firma_id):
+    c1, c2, _ = st.columns([1.2, 1.2, 2])
+    tur = c1.segmented_control("Cari türü", ["Müşteriler", "Satıcılar"], default="Müşteriler", key="cari_tur",
+                               required=True, label_visibility="collapsed")
+    donem = c2.segmented_control("Cari dönemi", ["Son 6 ay", "Tümü"], default="Son 6 ay", key="cari_donem",
+                                 required=True, label_visibility="collapsed")
+    kod = 10 if tur == "Müşteriler" else 58
+    liste = cari_ozet(firma_id, kod, 6 if donem == "Son 6 ay" else None)
+    if not liste:
+        st.caption("Bu dönemde kayıt yok.")
+        return
+    html(cari_html(liste, "Müşteri" if kod == 10 else "Satıcı"))
+    if kod == 10 and liste[0]["pay"] >= 0.35:
+        st.warning(f"Satışların %{liste[0]['pay'] * 100:.0f}'i {liste[0]['karsi_taraf']} firmasından: "
+                   "tek müşteriye bağımlılık tahsilat riskini artırır.", icon=":material/warning:")
+    st.write("")
+    secim = st.selectbox("Cari hesap ekstresi", [c["karsi_taraf"] for c in liste], key="cari_secim")
+    ekstre = cari_ekstre(firma_id, secim)
+    st.dataframe([{"Tarih": tarih_tr(e["tarih"]), "İşlem": e["islem"], "Tutar": tl(e["tutar"]),
+                   "Yürüyen toplam": tl(e["bakiye"])} for e in ekstre], hide_index=True, width="stretch",
+                 height=min(38 * len(ekstre) + 40, 260),
+                 column_config={"Tutar": st.column_config.TextColumn(alignment="right"),
+                                "Yürüyen toplam": st.column_config.TextColumn(alignment="right")})
+
+
+def saglik_bolumu(firma_id):
+    g = gostergeler(firma_id)
+    html(saglik_html(g))
+    st.caption(f"Son {g['ay_sayisi']} ayın gerçekleşen hareketlerinden kurallarla hesaplanan demo göstergedir; "
+               "resmî bir kredi notu ya da derecelendirme değildir. Planlı kayıtlar dahil edilmez.")
+
+
+def senaryo_bolumu(firma_id):
+    c1, c2, c3, c4 = st.columns(4)
+    satis = c1.slider("Satış değişimi (%)", -50, 50, 0, 5, key="sen_satis")
+    alis = c2.slider("Satıcı maliyeti (%)", -50, 50, 0, 5, key="sen_alis")
+    kisi = c3.slider("Personel değişimi (kişi)", -5, 10, 0, 1, key="sen_kisi")
+    ay = c4.select_slider("Projeksiyon", [3, 6, 12], value=6, format_func=lambda x: f"{x} ay", key="sen_ay")
+    s = senaryo(firma_id, satis, alis, kisi, ay)
+    son = s["aylar"][-1]
+    fark = s["fark"]
+    html(f'<div class="ozet3"><div><div class="e">Bugün birikmiş nakit</div><div class="d">{tl(s["birikmis"])}</div>'
+         f'</div><div><div class="e">{ay} ay sonra · mevcut gidişat</div><div class="d">'
+         f'{tl(son["kumulatif_mevcut"])}</div></div><div><div class="e">{ay} ay sonra · senaryo</div>'
+         f'<div class="d {"iyi" if fark >= 0 else "kotu"}">{tl(son["kumulatif_senaryo"])} '
+         f'<small>({"+" if fark > 0 else ""}{kisa_tl(fark)})</small></div></div></div>')
+    st.altair_chart(senaryo_grafigi(s), width="stretch")
+    st.caption(f"Taban: {', '.join(ay_adi(a) for a in s['taban_aylar'])} ortalaması · {s['calisan']} çalışan · "
+               "Varsayımlar: KDV satışla, SGK ve muhtasar maaşla orantılı değişir; geçici vergi son 6 ayın aylık "
+               "ortalaması; planlı kayıtlar kendi aylarına eklenir. Tahmindir.")
+
+
 # ---------- 2) FİRMA PANELİ ----------
 def firma_paneli(k):
     firma_id = k["firma_id"]  # Kural 2: firma_id OTURUMDAN; kullanıcı değiştiremez
@@ -499,6 +579,14 @@ def firma_paneli(k):
     with sol:  # asistan sayfa açılır açılmaz görünür (yüksekliği ekrana göre CSS ile ayarlanır)
         asistan_bolumu(k, firma_id)
     with sag:
+        with st.container(key="uyari_kart"):
+            liste_u = uyarilar(firma_id)
+            kart_basligi("Uyarılar", "Dikkat etmeniz gerekenler",
+                         f"{sum(u['seviye'] in ('kritik', 'uyari') for u in liste_u)} önemli" if
+                         any(u["seviye"] in ("kritik", "uyari") for u in liste_u) else "Sorun yok",
+                         "kirmizi" if any(u["seviye"] == "kritik" for u in liste_u) else "yesil")
+            st.write("")
+            html(uyarilar_html(liste_u))
         c1, c2 = st.columns(2)
         kpi(c1, "Bu ay ödenecek", tl(sum(s["tutar_tl"] for s in bu_ay)), f"{len(bu_ay)} ödeme")
         kpi(c2, "Geciken ödeme", len(geciken),
@@ -519,22 +607,34 @@ def firma_paneli(k):
     st.write("")
     with st.container(key="alt_kart"):
         liste = hareketler(firma_id)
-        t0, th, t1, t2, t3 = st.tabs([":material/table_chart: Nakit akış tablosu", ":material/list_alt: Hareket dökümü",
-                                      ":material/receipt_long: Yükümlülükler",
-                                      ":material/event: Planlı ödeme ve tahsilatlar",
-                                      ":material/outgoing_mail: Taleplerim"])
+        t0, th, tk, tc, ts, tn, t1, t2, t3 = st.tabs([
+            ":material/table_chart: Nakit akış", ":material/list_alt: Hareketler",
+            ":material/calendar_month: Ödeme takvimi", ":material/groups: Cari hesaplar",
+            ":material/monitor_heart: Finansal sağlık", ":material/tune: Senaryo",
+            ":material/receipt_long: Yükümlülükler", ":material/event: Planlı kayıtlar",
+            ":material/outgoing_mail: Talepler"])
         with t0:
             nakit_bolumu(k, liste)
         with th:
             hareket_bolumu(k, liste)
+        with tk:
+            takvim_bolumu([firma_id], "firma_takvim")
+        with tc:
+            cari_bolumu(firma_id)
+        with ts:
+            saglik_bolumu(firma_id)
+        with tn:
+            senaryo_bolumu(firma_id)
         with t1:
+            html('<div class="bolum-etiket">Ödenmemiş vergi ve prim borçlarının yaşlandırması</div>')
+            html(yaslandirma_html(yaslandirma(firma_id)))
             df_y = pd.DataFrame([{"Tür": s["tur"], "Dönem": donem_tr(s["donem"]), "Tutar": tl(s["tutar_tl"]),
                                   "Son ödeme": tarih_tr(s["son_odeme_tarihi"]), "Durum": s["durum"],
                                   "Ödeme tarihi": tarih_tr(s["odeme_tarihi"])} for s in satirlar])
             renk = {"Gecikti": "color:#b42318;font-weight:600", "Bekliyor": "color:#9a6700;font-weight:600",
                     "Ödendi": "color:#1a7f37"}
             st.dataframe(df_y.style.map(lambda d: renk.get(d, ""), subset=["Durum"]),
-                         hide_index=True, width="stretch", height=400)
+                         hide_index=True, width="stretch", height=380)
             csv_indir(df_y, "yukumlulukler.csv")
         with t2:
             planli_bolumu(k, firma_id)
@@ -656,6 +756,17 @@ def muhasebeci_paneli(k):
     if mesaj:
         getattr(st, mesaj[0])(mesaj[1])
     firma_portfoyu(talepler)
+    st.write("")
+    with st.container(key="takvim_kart"):
+        kart_basligi("Vergi takvimi ve yaşlandırma", "Tüm firmaların son ödeme günleri ve ödenmemiş borçları")
+        ta, ty = st.tabs([":material/calendar_month: Vergi takvimi (tüm firmalar)",
+                          ":material/hourglass_bottom: Yaşlandırma"])
+        fids = firmalar()
+        with ta:
+            takvim_bolumu(fids, "muh_takvim", {f: firma_kisa_adi(firma_bilgisi(f).get("unvan", f)) for f in fids})
+        with ty:
+            html(yaslandirma_tablo_html([(firma_bilgisi(f).get("unvan", f), yaslandirma(f)) for f in fids]))
+            st.caption("Ödenmemiş vergi/prim yükümlülükleri, son ödeme gününden bugüne geçen süreye göre gruplanmıştır.")
     st.write("")
     with st.container(key="alt_kart"):
         kart_basligi("Bekleyen talepler", "Her talebi inceleyip onaylayın ya da reddedin",

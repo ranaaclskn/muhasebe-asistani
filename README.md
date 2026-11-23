@@ -31,14 +31,19 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
 - **Yan menü:** kullanıcı bilgisi ve firma künyesi (unvan, tür, sektör, vergi no, çalışan sayısı), çıkış.
 - **Firma paneli:**
   - **Asistan** sol üstte, sayfa açılır açılmaz (yazma kutusu dahil) ekranda görünür; sohbet alanının yüksekliği ekran boyuna göre ayarlanır. "Sık sorulanlar" butonları son mesajın altındadır. Her cevabın altında hangi yoldan (sql/rag) ve hangi kaynaktan geldiği yazar. Onay sorularında **Evet / Hayır** butonları çıkar.
+  - **Uyarılar** (sağ üstte): gecikmiş ödemeler (kırmızı), 7 gün içinde son tarihi gelenler, tek müşteriye bağımlılık (satışların %35'i ve üstü), gideri gelirinden fazla aylar, 30 gün içindeki planlı ödemeler; yoksa "Her şey yolunda".
   - **Özet kartları:** bu ay ödenecek, geciken ödeme, en yakın son tarih, seçilen dönemin net durumu (artı/eksi).
   - **Gelir–gider grafiği:** gelir sıfırın üstünde, gider altında, koyu çizgi ayın neti. Dönem seçimi (son 3 ay / son 6 ay / tümü), toplam gelir–gider–net özeti, **gider dağılımı** (vergi/prim, maaş, alış faturaları) ve tablo görünümü (CSV indirilebilir). Gelir = satış faturaları + planlı tahsilatlar; gider = alış faturaları + **net** maaşlar + vergi/prim + planlı ödemeler (maaşta net kullanılır, çünkü SGK ve muhtasar kesintileri zaten vergi/prim olarak sayılır). İleri tarihli aylar açık renkle "plan" olarak gösterilir.
   - **Yaklaşan ödemeler:** ödenmemiş vergi/prim ve planlı ödemeler tarih sırasıyla; "4 gün gecikti" (kırmızı), "5 gün kaldı" (7 gün kalınca sarı).
   - **Nakit akış tablosu** (hocanın Excel "N.AKIŞI" sayfası örnek alındı): satırlar **kodlu kalemler** (10 müşteri tahsilatları — her müşteri ayrı satır, 19 planlı tahsilat; 37 personel maaşları, 38 SGK, 52 muhtasar, 53 KDV, 54 geçici vergi, 58 satıcılar — her satıcı ayrı satır, 70 planlı ödeme), sütunlar **aylar**. Önceki dönemden devir, TOPLAM TAHSİLAT, TOPLAM ÖDEME, NET NAKİT AKIŞI ve kümülatif satırları; ödemeler eksi ve kırmızı, ileri tarihli aylar "Plan". Dönem (son 3 / 6 ay / tümü) ve müşteri/satıcı kırılımı seçilebilir. **Excel olarak indir:** biçimlendirilmiş `.xlsx` (Nakit Akış, filtreli ve `SUBTOTAL` toplamlı Hareket, Kodlar sayfaları).
   - **Hareket dökümü** (Excel "HAREKET" sayfası karşılığı): faturalar, maaş ödemeleri, vergi/prim ve planlı kayıtlar tek listede — tarih, vade, giriş/çıkış, kod, kalem, işlem, karşı taraf, tutar, durum (Gerçekleşti / Bekliyor / Gecikti / Plan). Ay, yön, kalem ve metin araması ile filtrelenir; seçime göre giriş, çıkış ve net toplamı.
-  - **Diğer sekmeler:** yükümlülükler (durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
+  - **Ödeme takvimi:** ay takvimi; her gün hücresinde o gün son tarihi olan vergi/prim ve planlı kayıtlar durum renginde (gecikti / bekliyor / ödendi / plan / tahsilat), üzerine gelince ayrıntı; bugün çerçeveli.
+  - **Cari hesaplar:** müşteri ve satıcı bazında toplam, pay (çubukla), fatura sayısı, ortalama fatura, ilk/son işlem; seçilen cari için **cari hesap ekstresi** (yürüyen toplamla). Tek müşteri %35'i geçerse uyarı.
+  - **Finansal sağlık:** 0–100 **demo sağlık puanı** (zamanında ödeme 25, nakit kârlılığı 25, gecikme 20, müşteri dağılımı 15, nakit dayanıklılığı 15; her bileşen ve formülü ekranda) ve göstergeler: net nakit marjı, gelir büyümesi, personel gider oranı, vergi yükü, zamanında ödeme oranı, nakit dayanıklılığı (birikmiş nakit kaç aylık gideri karşılıyor). Resmî bir derecelendirme değildir.
+  - **Senaryo ("ne olur?"):** satış (%), satıcı maliyeti (%) ve personel sayısı (kişi) kaydırıcılarıyla 3/6/12 aylık birikmiş nakit projeksiyonu; mevcut gidişat ile senaryo aynı grafikte. Taban son 3 tamamlanmış ayın ortalaması; varsayımlar ekranda yazılı.
+  - **Diğer sekmeler:** yükümlülükler (üstte ödenmemiş borçların **yaşlandırması**: vadesi gelmemiş / 1–30 / 31–60 / 60+ gün gecikmiş; tablo durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
   - Nakit akış tablosu ve gelir–gider grafiği aynı kaynakları kullanır; ay ay netleri birebir aynıdır (testle kontrol edilir).
-- **Muhasebeci paneli:** **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
+- **Muhasebeci paneli:** **tüm firmaların vergi takvimi** (ay takviminde firma adıyla) ve **yaşlandırma tablosu** (firma × gecikme kovası), **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
 
 Kullanıcının eklediği kayıtlar muhasebecinin resmî kayıtlarından (`yukumlulukler`) **ayrı** tutulur; "bu ay ne kadar vergi ödeyeceğim" sorusu yalnız resmî kayıtlardan cevaplanır.
 
@@ -230,7 +235,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 149 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 159 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -252,7 +257,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 149/149 |
+| Birim testleri (`pytest`) | 159/159 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -274,6 +279,7 @@ muhasebe-asistani/
 │   ├── onay.py          # insan onayı, tek kullanımlık token, denetim kaydı
 │   ├── bildirim.py      # n8n köprüsü: onay e-postası (kuyruk, tekrar deneme), ödeme hatırlatması
 │   ├── nakit.py         # hareket dökümü ve nakit akış tablosu (kod planı, kod × ay matrisi, devir, kümülatif)
+│   ├── analiz.py        # uyarılar, ödeme takvimi, yaşlandırma, cari hesap/ekstre, finansal sağlık puanı, senaryo
 │   ├── rag.py           # Chroma arama → rerank → JSON cevap → kanıt eşleştirme
 │   ├── dogrulama.py     # lexical rerank, dönem çıkarımı, kanıt/atıf doğrulama
 │   ├── akis.py          # LangGraph: niyet → {sql, rag, talep, reddet} → logla
@@ -293,7 +299,8 @@ muhasebe-asistani/
 ├── ui/
 │   ├── streamlit_app.py # giriş, firma paneli (asistan, kartlar, yaklaşan ödemeler, sekmeler), muhasebeci paneli
 │   ├── grafik.py        # gelir–gider grafiği (Altair), aylık özet ve gider dağılımı
-│   └── tablolar.py      # Excel benzeri nakit akış tablosu (HTML), .xlsx raporu, muhasebeci firma portföyü
+│   ├── tablolar.py      # Excel benzeri nakit akış tablosu (HTML), .xlsx raporu, muhasebeci firma portföyü
+│   └── analiz_gorunum.py # uyarı kartları, takvim ızgarası, sağlık puanı halkası, cari tablo, senaryo grafiği
 ├── tests/               # pytest testleri (veritabanının geçici kopyasında, model gerekmez)
 ├── .streamlit/config.toml  # tema ve yalnızca 127.0.0.1'de çalışma ayarı
 ├── n8n/                 # akislar.json, test_posta_kimligi.json, kur.sh, baslat.sh, AI Agent sistem mesajı
@@ -332,6 +339,7 @@ muhasebe-asistani/
 - **Belgeler kurgusaldır:** beyanname metinleri `02_belge_uret.py` ile üretilir; gerçek PDF beyanname okunmaz.
 - **Çalışan ve bordro verisi kurgusaldır** (`00_bordro_uret.py`, sabit seed); toplamlar muhtasar beyannameleriyle tutarlı olacak şekilde üretilmiştir.
 - **Gecikme zammı tahminidir:** bugüne kadarki tutarı gösterir, ödeme günü ilerledikçe artar. Oran `.env`'den gelir ve güncel tutulmalıdır. SGK primi için tahmin verilmez; kesin tutarı vergi dairesi / SGK hesaplar.
+- **Sağlık puanı ve senaryo kural tabanlıdır:** formüller ekranda yazılıdır; banka bakiyesi verisi olmadığından "birikmiş nakit" kayıtlardaki gerçekleşen giriş–çıkış farkıdır. Alacak takibi (açık fatura) verisi olmadığından yaşlandırma yalnız ödenmemiş vergi/prim borçlarını kapsar.
 - **Gelir–gider grafiği demo verisidir:** satış faturalarının bir kısmı grafik dengeli görünsün diye gidere oranla üretilmiştir; gerçek bir kârlılık göstergesi değildir.
 - **Geçerli bir atıf, cevabın doğru olduğunu kanıtlamaz.** Kanıt eşleştirme yalnızca rakam ve tarihleri kontrol eder, cümlenin anlamını kontrol etmez.
 - Vergi takvimi ve rehber metinleri **demo amaçlıdır**; resmi bilgi için GİB ve SGK duyurularına bakın.
@@ -345,7 +353,8 @@ muhasebe-asistani/
 - [x] Kurumsal arayüz: gelir–gider grafiği, yaklaşan ödemeler, gider dağılımı, CSV indirme
 - [x] Tahmini gecikme zammı ve gecikme zammı oranı cevabı
 - [x] Nakit akış tablosu ve hareket dökümü (Excel indirme), muhasebeci firma portföyü
-- [x] pytest birim testleri (149 test)
+- [x] Uyarılar, ödeme takvimi, cari hesaplar, yaşlandırma, finansal sağlık puanı, senaryo simülatörü
+- [x] pytest birim testleri (159 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)
