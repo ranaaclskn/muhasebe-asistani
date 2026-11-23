@@ -4,7 +4,7 @@ Beyanname türü: Katma Değer Vergisi (KDV) beyannamesi, aylık
 Vergilendirme dönemi: Mayıs 2026
 
 Ödenecek KDV: 71.233,83 TL
-Son ödeme tarihi: 28.06.2026
+Son ödeme tarihi: 29.06.2026
 
 Matrah ve hesaplama özeti:
 - Teslim ve hizmetlerin matrahı: 890.422,85 TL

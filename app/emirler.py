@@ -160,6 +160,20 @@ def evet_mi(cevap):
     return bool(re.fullmatch(r"\s*(evet|e|onay|onaylıyorum|tamam|olur|kaydet|gönder)\s*[.!]?\s*", _kucuk(cevap)))
 
 
+# Asistanın cevabın sonunda yaptığı teklif ("isterseniz bir görüşme talebi oluşturabilirim").
+# Arayüz bu metni görünce teklifi hatırlar; sonraki kısa onay ("oluştur", "evet") açık emre çevrilir.
+GORUSME_TEKLIFI = "görüşme talebi oluşturabilirim"
+
+
+def teklif_onayi(cevap, onceki_soru):
+    """Bir önceki cevaptaki görüşme teklifine kısa onay mı verildi? -> akışa gidecek açık emir; değilse None.
+    'oluştur' tek başına hangi işlem olduğunu söylemez; konu da önceki sorudan alınır (talep anlamlı olsun)."""
+    if not onceki_soru or not re.fullmatch(r"\s*(evet|e|olur|tamam|isterim|lütfen|yap|oluştur\w*)"
+                                           r"(\s+(lütfen|evet))?\s*[.!]?\s*", _kucuk(cevap)):
+        return None
+    return f"Muhasebecimle görüşme talebi oluştur. Konu: {onceki_soru}"
+
+
 def talep_sorgu_kalibi(soru):
     """'3 numaralı talebim ne durumda', 'taleplerim ne oldu' -> talep DURUM sorgusu (atölye SORGULA kolu).
     'talep oluştur' gibi emirler hariç."""

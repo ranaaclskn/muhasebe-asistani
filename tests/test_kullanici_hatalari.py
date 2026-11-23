@@ -508,3 +508,47 @@ def test_ise_alim_yil_ve_maliyet():
     beklenen = [x for x in db.calistir("calisan_listesi", "F001") if x["ise_giris"].startswith("2025")]
     assert {x["id"] for x in c["satirlar"]} == {x["id"] for x in beklenen}
     assert "toplam net maaş giderinin %" in c["cevap"]
+
+
+# --- 2026-11-23 arayüz denemeleri ---
+def test_sigorta_primi_yalniz_sgk():  # "sigorta primi" filtre uygulanmıyor, 4 ödemenin hepsi geliyordu
+    n = kural_duzelt("bu ayki sigorta primi ödemem ne kadar",
+                     {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]})
+    assert n["sorgu"] == "ay_odemeleri" and n["parametreler"] == ["2026-11", "SGK primi"]
+
+
+def test_almam_gereken_tahsilattir():  # vergi borçlarını listeliyordu
+    n = kural_duzelt("almam gereken ödemeler neler bu ay",
+                     {"niyet": "kayit", "sorgu": "ay_odemeleri", "parametreler": ["2026-11"]})
+    assert n["sorgu"] == "beklenen_tahsilatlar" and n["parametreler"] == ["2026-11"]
+
+
+def test_gelecek_ve_gecikmis_ayri_toplanir(monkeypatch):  # gecikmiş borç "gelecek ödeme" toplamına karışıyordu
+    monkeypatch.setattr(db, "BUGUN", "2026-11-23")
+    c = cevapla_kayit("bu ay gelecek ödemelerim neler", "F001",
+                      {"sorgu": "ay_odemeleri", "parametreler": ["2026-11"]})["cevap"]
+    assert "Gelecek ödemeler: 110.530,93 TL" in c and "Gecikmiş: 54.938,65 TL" in c
+    assert "Ay toplamı: 165.469,58 TL" in c
+
+
+def test_olustur_onceki_teklife_onaydir():  # "oluştur" genel "Ne yapmamı istersiniz?" cevabı alıyordu
+    from app.emirler import emir_cikar, teklif_onayi
+    onceki = "bu ay geciken vergilerimin faizi ne kadar"
+    for cevap in ["oluştur", "Evet", "oluşturabilirsin", "tamam lütfen"]:
+        emir = teklif_onayi(cevap, onceki)
+        assert emir and onceki in emir and emir_cikar(emir)["emir"] == "gorusme_talebi"
+    assert teklif_onayi("oluştur", None) is None                       # teklif yoksa dokunma
+    assert teklif_onayi("KDV beyannamemi gönder", onceki) is None      # yeni bir istek
+
+
+def test_son_odeme_tarihi_tatile_dusmez():  # Ekim KDV'si 28.11.2026 cumartesi görünüyordu (VUK md. 18)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tatil", KOK / "scripts" / "07_tatil_kaydir.py")
+    tatil = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tatil)
+    assert tatil.is_gunu("2026-11-28") == "2026-11-30" and tatil.is_gunu("2026-10-29") == "2026-10-30"
+    kotu = [r["id"] for r in db.baglan().execute("SELECT id, son_odeme_tarihi FROM yukumlulukler")
+            if tatil.is_gunu(r["son_odeme_tarihi"]) != r["son_odeme_tarihi"]]
+    assert kotu == []
+    s = db.calistir("durum", "F001", "KDV", "2026-10")
+    assert s[0]["son_odeme_tarihi"] == "2026-11-30"

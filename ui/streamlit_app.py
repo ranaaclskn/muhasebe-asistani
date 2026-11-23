@@ -16,6 +16,7 @@ import streamlit as st  # noqa: E402
 from app.akis import devam, sor  # noqa: E402
 from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
+from app.emirler import GORUSME_TEKLIFI, teklif_onayi  # noqa: E402
 from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri, firmalar,  # noqa: E402
                     erisilebilir_firma, kayitli_eposta, kullanici_dogrula, planli_islem_ekle, planli_islem_sil,
                     planli_islemler, talep_karar, yukumlulukler)
@@ -284,6 +285,7 @@ def sohbet_temizle():
     st.session_state.mesajlar = []
     st.session_state.bekleyen = None
     st.session_state.thread_id = None
+    st.session_state.teklif = None
 
 
 def asistan_bolumu(k, firma_id):
@@ -335,6 +337,10 @@ def asistan_bolumu(k, firma_id):
         soru = yazilan or soru
 
         if soru:
+            # Önceki cevap görüşme talebi teklif ettiyse "oluştur / evet" o teklife onaydır (yeni thread
+            # önceki cevabı bilmez); ekranda kullanıcının yazdığı, akışa açık emir gider.
+            teklif = st.session_state.pop("teklif", None)
+            akisa = (None if bekleyen else teklif_onayi(soru, teklif)) or soru
             st.session_state.mesajlar.append({"rol": "user", "metin": soru})
             with kutu:
                 with st.chat_message("user", avatar=KULLANICI_AVATAR):
@@ -344,7 +350,7 @@ def asistan_bolumu(k, firma_id):
                         if bekleyen:  # KALDIĞI YERDEN devam (Command(resume=...))
                             s = devam(soru, st.session_state.thread_id)
                         else:         # yeni soru, yeni thread
-                            s = sor(soru, firma_id, k["id"])
+                            s = sor(akisa, firma_id, k["id"])
                     if s["bekleyen"]:
                         kaynak = "Yol: soru · Cevabınız bekleniyor"
                     else:
@@ -354,6 +360,8 @@ def asistan_bolumu(k, firma_id):
             st.session_state.mesajlar.append({"rol": "assistant", "metin": s["cevap"], "kaynak": kaynak})
             st.session_state.bekleyen = s["bekleyen"]
             st.session_state.thread_id = s["thread_id"] if s["bekleyen"] else None
+            if not s["bekleyen"] and GORUSME_TEKLIFI in s["cevap"]:
+                st.session_state.teklif = soru  # konu: teklifi doğuran soru
             st.rerun()  # butonlar / ipucu güncel duruma göre yeniden çizilsin
 
 

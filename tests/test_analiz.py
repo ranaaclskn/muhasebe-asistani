@@ -31,7 +31,8 @@ def test_uyarilar_gecikme_ve_yaklasan_odeme():
     u = analiz.uyarilar("F001")
     assert u[0]["seviye"] == "kritik" and "54.938,65 TL" in u[0]["baslik"] and "Geçici vergi" in u[0]["detay"]
     yakin = next(x for x in u if x["baslik"].startswith("7 gün içinde"))
-    assert "2 ödeme" in yakin["baslik"] and "Muhtasar" in yakin["detay"] and "KDV" in yakin["detay"]  # 26 ve 28.11
+    # Muhtasar 26.11; KDV'nin son günü 28.11 cumartesi değil 30.11 pazartesi -> 7 günün dışında
+    assert "1 ödeme" in yakin["baslik"] and "Muhtasar" in yakin["detay"] and "KDV" not in yakin["detay"]
 
 
 def test_uyari_yoksa_her_sey_yolunda(monkeypatch):

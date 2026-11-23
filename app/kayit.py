@@ -10,6 +10,7 @@ import re
 
 from langchain_ollama import ChatOllama
 
+from app.emirler import GORUSME_TEKLIFI
 from app.config import BUGUN, GECIKME_ZAMMI_AYLIK, GECIKME_ZAMMI_TARIH, LLM_MODEL, OLLAMA_URL
 from app.db import calistir, planli_islemler
 from app.dogrulama import lexical_score
@@ -169,6 +170,11 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
         net = round(giris - cikis, 2)
         metin += (f"\n\n**Beklenen giriş: {tl(giris)}** · **Planlı çıkış: {tl(cikis)}** · "
                   f"**Net: {'+' if net >= 0 else '−'}{tl(abs(net))}**")
+    elif sorgu == "ay_odemeleri" and gecikmis and toplam is not None:
+        # Gecikmiş borç "gelecek ödeme" değildir: ayrı göster, ay toplamı da kalsın
+        gec = round(sum(s["tutar_tl"] for s in satirlar if s["durum"] == "Gecikti"), 2)
+        metin += (f"\n\n**Gelecek ödemeler: {tl(round(toplam - gec, 2))}** · "
+                  f"**Gecikmiş: {tl(gec)}** (gecikme zammı işliyor) · **Ay toplamı: {tl(toplam)}**")
     elif toplam is not None:
         metin += f"\n\n**Toplam: {tl(toplam)}**"
     return metin
@@ -291,7 +297,7 @@ def gecikme_faizi_cevabi(firma_id, ay=None):
     if sgk_var:
         metin += ("\n\n**SGK primi:** Geciken prime gecikme cezası ve gecikme zammı birlikte uygulanır ve SGK kendi "
                   "yöntemiyle hesaplar; bu tutar kayıtlarınızda yok, tahmin vermiyorum.")
-    metin += "\n\nKesin tutar için muhasebecinize danışın; isterseniz bir görüşme talebi oluşturabilirim."
+    metin += f"\n\nKesin tutar için muhasebecinize danışın; isterseniz bir {GORUSME_TEKLIFI}."
     return {"cevap": metin, "kaynaklar": [s["id"] for s in satirlar] + ["6183 md.51 (oran: " + oran_tr + "/ay)"],
             "satirlar": satirlar, "yontem": "gecikme_faizi"}
 

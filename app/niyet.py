@@ -179,7 +179,7 @@ def dogrula(cikti):
 ALAN_KELIMELERI = ["vergi", "kdv", "sgk", "prim", "muhtasar", "beyanname", "ödeme", "ödedim", "öder",
                    "fatura", "borç", "matrah", "stopaj", "muhasebe", "ceza", "gecik"]
 _TUR_KELIMELERI = [("geçici vergi", "Geçici vergi"), ("kdv", "KDV"), ("muhtasar", "Muhtasar"),
-                   ("sgk", "SGK primi"), ("prim", "SGK primi")]
+                   ("sgk", "SGK primi"), ("sigorta prim", "SGK primi"), ("prim", "SGK primi")]
 
 
 def _kucuk(metin):
@@ -481,7 +481,8 @@ def _planli_kalibi(s):
     if re.search(r"nakit|giriş[- ]?çıkış|gelir[- ]?gider", s):
         return "nakit_plani"
     if re.search(r"tahsil|alacağ|alacak\b|alacaklar|para gelecek|ödeme gelecek|gelecek para|"
-                 r"müşteri\w* (öde|para|gel)|ödeme alaca", s):
+                 r"müşteri\w* (öde|para|gel)|ödeme alaca|"
+                 r"\balma(?:m|mız) gereken|alınacak|\balacağım", s):  # "almam gereken ödemeler" = tahsilat
         return "beklenen_tahsilatlar"
     if re.search(r"planl|planladı|eklediğim|kaydettiğim|not ettiğim|girdiğim", s):
         return "planli_odemeler"
