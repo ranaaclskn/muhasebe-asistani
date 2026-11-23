@@ -275,7 +275,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 383 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, güvenlik, ölçüm kuralları, alacak takibi, değerlendirme hataları, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 391 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, güvenlik, ölçüm kuralları, alacak takibi, değerlendirme hataları, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -291,14 +291,14 @@ python -m app.akis     # uçtan uca LangGraph akışı + talep + log
 python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiğini gösterir
 ```
 
-**Geniş değerlendirme (245 soru):** bir firma yetkilisinin aklına ilk gelebilecek sorular, farklı söyleyişlerle (yazım hatası ve Türkçe karaktersiz yazım dahil): ödeme durumu, bu ay/geçen ay, gecikme ve gecikme zammı, yaklaşan ödemeler, yıllık toplamlar, çalışan/bordro, fatura, alacak, planlı kayıtlar, beyanname, vergi takvimi, analizler, talepler, güvenlik ve kapsam dışı. Doğru cevaplar **asistandan bağımsız** hesaplanır (ham SQL ve beyanname dosyaları); her cevapta başka firma verisi sızıntısı da aranır. Ana set (110 soru) ve dört **kör set** vardır: her kör set, bir önceki turun hataları düzeltildikten sonra sonuçlara bakılmadan yazıldı, böylece asistanın hiç görmediği sorulardaki gerçek başarı ölçülür.
+**Geniş değerlendirme (279 soru):** bir firma yetkilisinin aklına ilk gelebilecek sorular, farklı söyleyişlerle (yazım hatası ve Türkçe karaktersiz yazım dahil): ödeme durumu, bu ay/geçen ay, gecikme ve gecikme zammı, yaklaşan ödemeler, yıllık toplamlar, çalışan/bordro, fatura, alacak, planlı kayıtlar, beyanname, vergi takvimi, analizler, talepler, güvenlik ve kapsam dışı. Doğru cevaplar **asistandan bağımsız** hesaplanır (ham SQL ve beyanname dosyaları); her cevapta başka firma verisi sızıntısı da aranır. Ana set (110 soru) ve beş **kör set** vardır: her kör set, bir önceki turun hataları düzeltildikten sonra sonuçlara bakılmadan yazıldı, böylece asistanın hiç görmediği sorulardaki gerçek başarı ölçülür.
 
 ```bash
 python scripts/09_yuz_soru.py                 # ana set: 110 soru -> data/yuz_soru_sonuclar.csv
 ```
 
 ```bash
-python scripts/09_yuz_soru.py --set kor4      # kör setler: kor, kor2, kor3, kor4
+python scripts/09_yuz_soru.py --set kor5      # kör setler: kor, kor2, kor3, kor4, kor5
 ```
 
 **Toplu ölçüm (tek komut):** test setindeki 15 soru gerçek asistana (model dahil) sorulur; niyet doğruluğu, Hit@3 ve Top1, cevap doğruluğu, başka firma verisi sızıntısı, onaysız işlem ve süre ölçülür. Ayrıntı `data/sonuclar.csv`'ye yazılır; hedef (Hit@3 ≥ %90, sızıntı 0, onaysız işlem 0) tutmazsa çıkış kodu 1'dir. Veritabanının geçici kopyasında çalışır, gerçek onay kuyruğuna talep düşmez. Ollama açık olmalı; Streamlit'i kapatın.
@@ -319,7 +319,8 @@ Puanlama kuralları `app/olcum.py`'dedir (atölye `d6_04_eval.py` karşılığı
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 383/383 |
+| Birim testleri (`pytest`) | 391/391 |
+| **Geniş değerlendirme** (`scripts/09_yuz_soru.py`, 23.11.2026) | 279/279 son kodla · kör setlerde **ilk** ölçüm (asistanın hiç görmediği sorular): %84, %81, %93, %83, %79 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | **Toplu ölçüm** (`scripts/04_test_calistir.py`, 15 soru, 23.11.2026) | Niyet 15/15 · **Hit@3 10/10** · Top1 3/5 · cevap 15/15 · sızıntı 0 · onaysız işlem 0 |
 | Cevap süresi (aynı ölçüm, model yüklüyken) | ortalama 2,9 sn · medyan 2,1 sn · en uzun 8,1 sn (ilk soru model yüklenirken ~30 sn) |
@@ -327,7 +328,7 @@ Puanlama kuralları `app/olcum.py`'dedir (atölye `d6_04_eval.py` karşılığı
 
 Top1 3/5: T06 ve T07'de beklenen beyanname aramanın ilk 3 parçasında ama 1. sırada değil (önde vergi takvimi / aynı ayın KDV beyannamesi); cevap yine doğru dosyadan verilir, çünkü beyanname soruları dosya adıyla da eşleştirilir. Test setindeki T04'ün beklenen tarihi, son ödeme günlerinin resmî tatile göre kaydırılmasından sonra 31.10.2026'dan 02.11.2026'ya güncellendi. T12'de asistan başka firmayı soran soruyu modele göndermeden kodla reddeder (niyet `baska_firma`); ölçümde kayıt niyetine eşdeğer sayılır.
 
-Not: Test seti küçüktür (15 soru) ve prompt'lar bu sorular gözetilerek iyileştirilmiştir. Arayüzde denenen farklı sorular hata bulmaya devam etmektedir; bulunan her hata kalıcı test olarak eklenir (`EK1`–`EK8` ve `tests/` altındaki pytest testleri).
+Not: Kör setlerin İLK ölçümleri (%79–93) asistanın gerçekten yeni söyleyişlerdeki başarısını gösterir; her turda bulunan hatalar düzeltilip kalıcı teste dönüştürüldüğü için son kodla 279/279 doğrudur, ama hiç denenmemiş bir söyleyişte asistan hâlâ yanlış yola gidebilir (küçük model + kurallar). Böyle bir kişisel ödeme sorusunda "kayıtlarınızda yok" demez: anlamadığını söyler ve ödeme özetini gösterir (güvenlik ağı). 15 soruluk test seti küçüktür ve prompt'lar bu sorular gözetilerek iyileştirilmiştir. Arayüzde denenen farklı sorular hata bulmaya devam etmektedir; bulunan her hata kalıcı test olarak eklenir (`EK1`–`EK8` ve `tests/` altındaki pytest testleri).
 
 ---
 
@@ -364,7 +365,7 @@ muhasebe-asistani/
 │   ├── 03_indeksle.py
 │   ├── 04_test_calistir.py # toplu ölçüm: test seti -> data/sonuclar.csv + özet (Hit@3, Top1, süre)
 │   ├── 05_hatirlatma.py # ödeme hatırlatma e-postaları (n8n; zamanlayıcı her sabah 09:00)
-│   ├── 09_yuz_soru.py   # geniş değerlendirme: 110 soru + 4 kör set, bağımsız doğru cevaplarla
+│   ├── 09_yuz_soru.py   # geniş değerlendirme: 110 soru + 5 kör set, bağımsız doğru cevaplarla
 │   ├── 08_alacak_verisi.py # faturalara vade ve tahsil tarihi (müşteri ödeme profilleri, açılış alacakları)
 │   ├── 06_aylik_rapor.py # tüm firmaların aylık PDF raporu (data/raporlar/)
 │   ├── test_posta_kutusu.py  # yerel test SMTP sunucusu (127.0.0.1:1025)
@@ -434,8 +435,8 @@ muhasebe-asistani/
 - [x] Muhasebecinin firmaya girmesi: portföyden firmanın paneli salt okunur açılır, açılış denetime yazılır
 - [x] Güvenlik: girişte deneme sınırı, n8n webhook'larında paylaşılan anahtar
 - [x] Alacak takibi: vade ve tahsil tarihi, açık alacaklar, yaşlandırma, ortalama tahsil süresi; nakit akışı tahsil gününe göre
-- [x] Geniş değerlendirme (245 soru, 4 kör set) ve bulunan hataların düzeltilmesi; anlaşılamayan ödeme sorusunda güvenlik ağı
-- [x] pytest birim testleri (383 test)
+- [x] Geniş değerlendirme (279 soru, 5 kör set) ve bulunan hataların düzeltilmesi; anlaşılamayan ödeme sorusunda güvenlik ağı
+- [x] pytest birim testleri (391 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [x] n8n zamanlayıcısı: her sabah 09:00 ödeme hatırlatması, her ayın 1'i aylık PDF raporu e-postası
 - [x] Toplu ölçüm betiği: niyet, Hit@3, Top1, cevap doğruluğu, sızıntı, onaysız işlem, süre (`scripts/04_test_calistir.py`)

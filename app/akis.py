@@ -103,7 +103,7 @@ def niyet_dugumu(d: Durum):
 _CEVAPSIZ_BAS = ("Bu bilgi kayıtlarınızda yok", "Bu soruya belgelerden emin bir cevap çıkaramadım")
 _ODEME_KONUSU = r"ödeme|öde\w*|borç|bor[cç]\w*|vergi|prim|kdv|sgk|muhtasar|geçici|gecik|yatır"
 _KISISEL = (r"\b(?:benim|bizim)\b|\w+(?:dığım|diğim|duğum|düğüm|tığım|tiğim|tuğum|tüğüm|dığımız|diğimiz)\b|"
-            r"var m[ıi]|\w+(?:ım|im|um|üm|ımız|imiz|umuz|ümüz)\b")
+            r"var m[ıi]|\w+(?:ım|im|um|üm|ımız|imiz|umuz|ümüz)(?:[ıiuüae]|[dt][ae]|n[ıi]n)?\b")
 
 
 def _guvenlik_agi(d, cevap):

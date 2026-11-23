@@ -403,6 +403,20 @@ def _ay_adi_donem(s):
     return None
 
 
+_GV_DONEM = {1: "Oca–Mar", 2: "Nis–Haz", 3: "Tem–Eyl", 4: "Eki–Ara"}
+_SIRA = {"birinci": 1, "ilk": 1, "ikinci": 2, "üçüncü": 3, "dördüncü": 4}
+
+
+def _gecici_donem(s):
+    """'3. dönem', '3 dönem', 'üçüncü dönem', '2026/3' -> '2026/3 (Tem–Eyl)' (yükümlülük tablosundaki biçim)."""
+    m = re.search(r"\b([1-4])\s*\.?\s*(?:dönem|çeyrek)|\b20\d{2}\s*/\s*([1-4])\b|\b(birinci|ilk|ikinci|üçüncü|dördüncü)\s+(?:dönem|çeyrek)", s)
+    if not m:
+        return None
+    n = int(m.group(1) or m.group(2)) if (m.group(1) or m.group(2)) else _SIRA[m.group(3)]
+    yil = re.search(r"\b(20\d{2})\b", s)
+    return f"{yil.group(1) if yil else BUGUN[:4]}/{n} ({_GV_DONEM[n]})"
+
+
 def _lokatif_ay(s):
     """'eylülde', 'ekim ayında', 'ağustos'ta' -> o ay ('2026-09'); yoksa None. (Ödeme AYI anlamında.)"""
     for i, ad in enumerate(AYLAR, 1):
@@ -431,7 +445,16 @@ def _ek_kayit_kalibi(s):
     """100 soruluk değerlendirmede yanlış yola giden kayıt soruları -> (sorgu, parametreler) ya da None."""
     if "beyan" in s or re.search(r"ödersem|ödemezsem|ne olur|tahmin|faiz|zammı|ceza", s):
         return None
+    if _planli_kalibi(s):  # kullanıcının kendi planlı kayıtları/tahsilatları kendi yolunda kalır
+        return None
     tur = _tek_acik_tur(s)
+    # Geçici vergi dönemi: '3. dönem geçici vergi', 'üçüncü dönem geçici vergi' -> '2026/3 (Tem–Eyl)'
+    gv = _gecici_donem(s)
+    if tur == "Geçici vergi" and gv:
+        return "durum", [tur, gv]
+    # Çok kısa soru: yalnız ay + tür ('mayıs kdv', 'ekim sgk') -> o dönemin kaydı
+    if tur and _ay_adi_donem(s) and len(re.findall(r"\w+", s)) <= 3:
+        return "durum", [tur, _ay_adi_donem(s)]
     # "Ekim KDV'si ne kadar", "Ekim muhtasarımın son ödeme günü ne" -> o DÖNEMİN kaydı (model yıllık toplam /
     # ödeme geçmişi veriyordu). Gelecek zaman ('kasımda ödenecek KDV') ödeme ayıdır, burada değil.
     donem = _ay_adi_donem(s)
@@ -462,11 +485,19 @@ def _ek_kayit_kalibi(s):
     # 'Bu ay toplam borcum ne kadar' -> bu ayın ödenmemişleri (model yıl özetini veriyordu)
     ay = _soru_ayi(s)
     turlu = [tur] if tur and "tur" in SORGULAR["ay_odemeleri"].get("istege_bagli", []) else []
+    # 'Bu ayın vergi yükü ne kadar', 'kasımda ne kadar vergi/prim var' -> o ayın ödenecekleri (bu ay ve sonrası)
+    if ay and ay >= BUGUN[:7] and re.search(r"vergi|prim|ödeme|yük|borç|bor[cç]", s) \
+            and re.search(r"ne kadar|toplam|neler|hangi|kaç|var mı", s) and not re.search(r"ödedi|ödendi|ödenmiş|yatırdı", s):
+        return "ay_odemeleri", [ay] + turlu
     if ay and re.search(r"\bbor[cç]\w*", s) and not re.search(r"müşteri|borçlu|bana borc|alacak|gecik", s):
         return "ay_odemeleri", [ay] + turlu
     # 'Ay sonuna kadar ne ödemem lazım' -> bu ayın ödenecekleri (model çekimser kalıyordu)
     if re.search(r"ay sonu|ayın sonu|ay bitmeden|ay bitene", s) and re.search(r"öde|borç|vergi|prim", s):
         return "ay_odemeleri", [BUGUN[:7]] + turlu
+    # 'Geç kalmış ödemelerimiz', 'borcum gecikti mi' -> ŞU AN gecikmiş ('geç kalırsam' koşul cümlesi değil)
+    if re.search(r"geç kal(?:mış|an|dı|dığ)\w*|bor[cç]\w* gecik\w*|gecik\w* bor[cç]", s) \
+            and not re.search(r"[ıi]rsa[mk]|ırsa|irse|ne olur", s):
+        return "gecikmis", []
     # 'Ödemeyi unuttuğum bir vergi var mı' -> ŞU AN gecikmiş
     if re.search(r"unuttu\w*|kaçırdı\w*|atladı\w*|gözden kaç\w*", s) and re.search(r"ödeme|vergi|borç|prim", s):
         return "gecikmis", []
@@ -657,7 +688,7 @@ def _gecikmis_kalibi(s):
         return False
     gecikme = re.search(r"gecik|(?:son (?:ödeme )?(?:tarihi|günü)|ödeme tarihi|vadesi|süresi|zamanı)\s+"
                         r"(?:\w+\s+)?geç(?:miş|en|ti)|vadesi dol|süresi dol", s)
-    return bool(gecikme and re.search(r"var mı|ödeme|borç|getir|göster|neler|hangi|listele|kayıt|yükümlülü", s))
+    return bool(gecikme and re.search(r"var mı|ödeme|bor[cç]|getir|göster|neler|hangi|listele|kayıt|yükümlülü", s))
 
 
 def _gec_odeme_kalibi(s):

@@ -17,7 +17,7 @@ _SAYI = r"(\d+|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on)"
 KOSUL = (r"\w+(?:ırsa|irse|ursa|ürse|arsa|erse)\w*|\w+(?:sam|sem|sak|sek)\b|\bolsa\b|\bsenaryo|"
          r"\bne olur\b|varsay")
 DEGISKEN = r"satış|ciro|gelir|hasılat|maliyet|alış|tedarik|hammadde|satıcı|personel|çalışan|eleman|işçi|kişi"
-ALACAK_KALIBI = (r"vadesi (?:geç|dol)\w* (?:alacak|fatura|tahsilat)|(?:alacak|fatura)\w* vadesi (?:geç|dol)|"
+ALACAK_KALIBI = (r"vadesi (?:geç|dol)\w* (?:\w+ )?(?:alacak|fatura|tahsilat)|(?:alacak|fatura)\w* vadesi (?:geç|dol)|"
                  r"tahsil edilme(?:miş|yen|di)|tahsil edeme|tahsil olma|açık (?:fatura|alacak)|ödenmemiş satış|"
                  r"(?:ödenmemiş|ödenmeyen|parası gelmeyen) fatura|parasını (?:almadı|alamadı)|ödemesini (?:almadı|alamadı)|"
                  r"kim(?:ler)? borçlu|borçlu (?:müşteri|olan)|bana borcu|borcu olan müşteri|"

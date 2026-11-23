@@ -72,6 +72,15 @@ def _yol(soru):
     ("Şirketim ne durumda?", "saglik", []),
     ("SGK prim ödemeleri ayın kaçına kadar yapılır?", "belge", None),
     ("kdv ne zman ödenio", "belge", None),                                      # yazım hatası
+    # 5. kör set
+    ("mayıs kdv", "durum", ["KDV", "2026-05"]),                                  # çok kısa soru
+    ("3. dönem geçici vergi ne kadar?", "durum", ["Geçici vergi", "2026/3 (Tem–Eyl)"]),
+    ("2. dönem geçici vergimi ödedim mi", "durum", ["Geçici vergi", "2026/2 (Nis–Haz)"]),
+    ("Bu ayın vergi yükü ne kadar?", "ay_odemeleri", ["2026-11"]),
+    ("Borcum gecikti mi?", "gecikmis", []),                                      # "borcum": c ile
+    ("Geç kalmış ödemelerimizi listeler misiniz?", "gecikmis", []),
+    ("Vadesi geçen müşteri faturaları hangileri?", "alacak", []),
+    ("KDV'nin son ödeme günü her ay kaçıdır?", "belge", None),                  # genel kural
 ])
 def test_yonlendirme(soru, sorgu, parametreler):
     r = _yol(soru)
@@ -152,6 +161,8 @@ def test_guvenlik_agi_kayitta_yok_demez():
     yok = "Bu bilgi kayıtlarınızda yok, muhasebecinize iletebilirim."
     r = _guvenlik_agi({"soru": "Ödemeyi unuttuğum bir vergi var mı?", "firma_id": "F002"}, yok)
     assert r and "anlayamadım" in r["cevap"] and "107.718,74" in r["cevap"]
+    r = _guvenlik_agi({"soru": "Geç kalmış ödemelerimizi listeler misiniz?", "firma_id": "F002"}, yok)
+    assert r and "107.718,74" in r["cevap"]  # "-imizi" eki de kişisel sayılır
     for soru in ("2025 Mart KDV'm ne kadardı?", "KDV iadesi nasıl alınır?", "Hangi hisseyi almalıyım?"):
         assert _guvenlik_agi({"soru": soru, "firma_id": "F002"}, yok) is None  # dönem / genel bilgi / kapsam dışı
     assert _guvenlik_agi({"soru": "Gecikmiş ödemem var mı?", "firma_id": "F002"}, "Gecikmiş ödemeniz var: ...") is None

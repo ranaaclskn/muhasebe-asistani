@@ -114,8 +114,10 @@ def takvim_kalibi(soru):
     """Genel son tarih KURALI mı soruluyor? ('ne zaman ödenir', 'ayın kaçında verilir', 'son günü')
     'ne zaman ödedim / ödendi mi' gibi kişisel kayıt soruları değil."""
     s = soru.replace("İ", "i").replace("I", "ı").lower()
-    zaman = re.search(r"ne zaman|kaçında|kaçına kadar|hangi gün|son gün|en geç|son tarih", s)
-    kural = re.search(r"ödenir|verilir|ödenmeli|ödenmesi|verilmeli|verilmesi|yatırıl|beyan edilir|yapılır|yapılmalı", s)
+    zaman = re.search(r"ne zaman|kaçında|kaçına kadar|hangi gün|son gün|en geç|son tarih|son ödeme (?:gün|tarih)|kaçıdır|"
+                      r"ayın kaçı", s)
+    kural = re.search(r"ödenir|verilir|ödenmeli|ödenmesi|verilmeli|verilmesi|yatırıl|beyan edilir|yapılır|yapılmalı|"
+                      r"\bher ay|kaçıdır|genel(?:de|likle)|normalde|kural olarak", s)
     return bool(zaman and kural and not re.search(r"ödedim|ödendi|ödemiş", s))
 
 
