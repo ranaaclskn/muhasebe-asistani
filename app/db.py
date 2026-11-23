@@ -118,6 +118,17 @@ SORGULAR = {
                         AND (durum = 'Gecikti' OR (durum = 'Bekliyor' AND son_odeme_tarihi < :bugun))
                   ORDER BY son_odeme_tarihi""",
     },
+    # "Toplam ne kadar borcumuz var" -> ay fark etmeksizin ÖDENMEMİŞ tüm vergi/prim kayıtları (gecikmiş + bekleyen).
+    # Model yalnızca gecikmişleri ('gecikmis') seçiyordu; kalıbı kod tanır (niyet._borc_kalibi).
+    "odenmemisler": {
+        "aciklama": "Ödenmemiş tüm vergi/prim borçları (gecikmiş ve bekleyen), toplam borç",
+        "parametreler": [],
+        "menude_yok": True,
+        "sql": """SELECT id, tur, donem, tutar_tl, son_odeme_tarihi, durum
+                  FROM yukumlulukler
+                  WHERE firma_id = :firma_id AND durum != 'Ödendi'
+                  ORDER BY son_odeme_tarihi, id""",
+    },
     "gec_odenenler": {  # 'gecikmis' ŞU ANKİ ödenmemiş borçtur; bu ise GEÇMİŞTE geç ÖDENMİŞ kayıtlardır
         "aciklama": "Geçmişte son ödeme tarihinden SONRA (geç) ödenmiş ödemeler (gecikmiş ödediğim, geç ödenenler)",
         "parametreler": [],

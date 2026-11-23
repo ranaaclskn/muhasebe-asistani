@@ -20,6 +20,7 @@ _EKLE = " Panelin altındaki “Planlı ödeme ve tahsilatlar” sekmesinden ekl
 # Sonuç boşsa "bilgi yok" yerine söylenecek ANLAMLI cevap (boş sonuç da bilgidir):
 BOS_SONUC = {
     "gecikmis": "Kayıtlarınıza göre gecikmiş ödemeniz yok.",
+    "odenmemisler": "Kayıtlarınıza göre ödenmemiş vergi/prim borcunuz yok.",
     "gec_odenenler": "Kayıtlarınıza göre geç ödenmiş bir ödemeniz yok; tüm ödemeler son ödeme tarihinde "
                      "ya da öncesinde yapılmış.",
     "planli_odemeler": "Bu dönem için eklediğiniz planlı ödeme yok." + _EKLE,
@@ -81,7 +82,7 @@ def veri_hazirla(sorgu, satirlar):
     toplam = None
     # Faturalar burada YOK: alış (gider) ve satış (gelir) toplanırsa anlamsız bir rakam çıkar;
     # onların ayrı toplamları sablon_cevap'ta hesaplanır.
-    if (sorgu in ("ay_odemeleri", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis", "yaklasanlar",
+    if (sorgu in ("ay_odemeleri", "odenmemisler", "odenenler", "yil_odenenler", "odeme_araligi", "gecikmis", "yaklasanlar",
                   "planli_odemeler", "beklenen_tahsilatlar")
             and len(satirlar) > 1):
         toplam = round(sum(s["tutar_tl"] for s in satirlar), 2)
@@ -141,6 +142,8 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
     baslik = {"gecikmis": "Gecikmiş ödemeniz var:",
               "ay_odemeleri": f"{n} ödeme bekliyor" + (f" ({gecikmis} tanesinin son ödeme tarihi geçti, "
                                                        f"gecikmiş)" if gecikmis else "") + ":",
+              "odenmemisler": f"Ödenmemiş {n} vergi/prim kaydınız var" + (f" ({gecikmis} tanesinin son ödeme "
+                                                                         f"tarihi geçti, gecikmiş)" if gecikmis else "") + ":",
               "odenenler": f"{n} ödeme yapılmış:",
               "yil_odenenler": f"{n} ödeme yapılmış (türe göre özet):",
               "odeme_araligi": f"{n} ödeme yapılmış (türe göre özet):",
@@ -181,11 +184,12 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
         net = round(giris - cikis, 2)
         metin += (f"\n\n**Beklenen giriş: {tl(giris)}** · **Planlı çıkış: {tl(cikis)}** · "
                   f"**Net: {'+' if net >= 0 else '−'}{tl(abs(net))}**")
-    elif sorgu == "ay_odemeleri" and gecikmis and toplam is not None:
+    elif sorgu in ("ay_odemeleri", "odenmemisler") and gecikmis and toplam is not None:
         # Gecikmiş borç "gelecek ödeme" değildir: ayrı göster, ay toplamı da kalsın
         gec = round(sum(s["tutar_tl"] for s in satirlar if s["durum"] == "Gecikti"), 2)
         metin += (f"\n\n**Gelecek ödemeler: {tl(round(toplam - gec, 2))}** · "
-                  f"**Gecikmiş: {tl(gec)}** (gecikme zammı işliyor) · **Ay toplamı: {tl(toplam)}**")
+                  f"**Gecikmiş: {tl(gec)}** (gecikme zammı işliyor) · "
+                  f"**{'Ay toplamı' if sorgu == 'ay_odemeleri' else 'Toplam borç'}: {tl(toplam)}**")
     elif toplam is not None:
         metin += f"\n\n**Toplam: {tl(toplam)}**"
     return metin
@@ -492,7 +496,7 @@ def cevapla_kayit(soru, firma_id, niyet):
     kaynaklar = [f"plan#{s['id']}" if "yon" in s else str(s["id"]) for s in satirlar]
     # Liste sorguları tek kayıtta da şablon: model tarihi/dönemi atıp bozuk cümle kuruyordu
     # ("Sigorta primi bu ayki ödememiz gereken...", "Geçen ay KDV ödediniz 44.307,46 TL.")
-    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "odenenler", "yil_odenenler",
+    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "odenmemisler", "odenenler", "yil_odenenler",
                                       "odeme_araligi", "gec_odenenler", "gecikmis", "yaklasanlar", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.

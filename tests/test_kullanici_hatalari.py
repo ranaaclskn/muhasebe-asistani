@@ -633,3 +633,27 @@ def test_tek_odenen_kayit_sablonla():  # "Geçen ay KDV ödediniz 44.307,46 TL."
     r = cevapla_kayit("geçen ay ne kadar KDV ödedim", "F001", n)
     assert r["yontem"] == "liste" and "44.307,46 TL" in r["cevap"] and "27.10.2026" in r["cevap"]
     assert "Eylül 2026" in r["cevap"] and "21.450,41" not in r["cevap"]  # yalnız KDV
+
+
+@pytest.mark.parametrize("soru", ["toplam ne kadar borcumuz var", "borçlarım ne kadar", "ödenmemiş vergilerim neler"])
+def test_toplam_borc_tum_odenmemisler(soru, monkeypatch):  # yalnızca gecikmiş kaydı veriyordu
+    monkeypatch.setattr(db, "BUGUN", "2026-11-23")
+    n = kural_duzelt(soru, {"niyet": "kayit", "sorgu": "gecikmis", "parametreler": []})
+    assert n["sorgu"] == "odenmemisler"
+    c = cevapla_kayit(soru, "F001", n)["cevap"]
+    assert "Toplam borç: 165.469,58 TL" in c and "Gecikmiş: 54.938,65 TL" in c
+
+
+def test_borc_kalibi_disindakiler():
+    from app.niyet import _borc_kalibi
+    assert not _borc_kalibi("gecikmiş borcumun faizi ne kadar")
+    assert not _borc_kalibi("müşterilerin bize borcu ne kadar")
+    assert not _borc_kalibi("kasım ayındaki borcum ne kadar")
+
+
+@pytest.mark.parametrize("soru", ["aralıkta ne kadar vergi ödeyeceğim", "aralıktane kadar vergi ödeyeceğim?"])
+def test_gelecek_ay_vergi_tahmin(soru):  # 2026 yılı ödeme özetini veriyordu
+    n = kural_duzelt(soru, {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]})
+    assert n["sorgu"] == "ay_odemeleri" and n["parametreler"] == ["2026-12"]
+    c = cevapla_kayit(soru, "F001", n)["cevap"]
+    assert "tahmin" in c and "643.278,61" not in c

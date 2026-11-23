@@ -274,6 +274,12 @@ def kural_duzelt(soru, sonuc):
         sorgu, yeni = planli, []
     elif _gec_odeme_kalibi(s):
         sorgu, yeni = "gec_odenenler", []
+    # "toplam ne kadar borcumuz var" -> ödenmemiş TÜM kayıtlar (model yalnız gecikmişleri veriyordu)
+    elif _borc_kalibi(s):
+        sorgu, yeni = "odenmemisler", []
+    # "aralıkta ne kadar vergi ödeyeceğim" -> o ayın ödenecekleri (kayıt yoksa tahmin); model yıl özetini veriyordu
+    elif _gelecek_ay_odemesi(s) and sorgu != "ay_odemeleri":
+        sorgu, yeni = "ay_odemeleri", [_gelecek_ay_odemesi(s)]
     # "KDV'mi en geç ne zaman ödemeliyim" -> o türün sıradaki ödenmemiş kaydı (model ödeme geçmişini veriyordu)
     elif _son_tarih_kalibi(s) and len(tek_tur) == 1:
         sorgu, yeni = "siradaki_tur", [tek_tur.pop()]
@@ -356,6 +362,10 @@ def _kesin_kayit(s):
         return "gec_odenenler"
     if _son_tarih_kalibi(s) and any(k in s for k, _ in _TUR_KELIMELERI):
         return "siradaki_tur"
+    if _borc_kalibi(s):
+        return "odenmemisler"
+    if _gelecek_ay_odemesi(s):
+        return "ay_odemeleri"
     if _gecikmis_kalibi(s):  # ŞU AN ödenmemiş ve son tarihi geçmiş
         return "gecikmis"
     if _fatura_kalibi(s):
@@ -420,6 +430,27 @@ def _son_tarih_kalibi(s):
     Soruda ay varsa o dönemin kaydı (durum) daha doğrudur -> burada tutulmaz. Geçmiş zaman ('ödedim') hariç."""
     return bool(re.search(r"en geç|ne zamana kadar|son (?:ödeme )?(?:tarihi|günü)|ne zaman öde(?:meli|yece|mem)", s)
                 and not re.search(r"ödedi|ödendi|ödemiş|ödenmiş", s) and not _soru_ayi(s))
+
+
+def _borc_kalibi(s):
+    """'toplam ne kadar borcumuz var', 'borçlarım ne kadar', 'ödenmemiş vergilerim'. Ay belirtilmemiş olmalı;
+    gecikme/faiz soruları ve müşterinin BİZE borcu (alacak, analiz kolu) buraya girmez."""
+    return bool(re.search(r"\bbor[cç]\w*|ödenmemiş", s)
+                and re.search(r"toplam|ne kadar|kaç|neler|hangi|var mı|tüm|hepsi|listele|göster", s)
+                and not re.search(r"gecik|vadesi geç|faiz|zam\b|zammı|ceza|müşteri|borçlu|bana borc|alacak", s)
+                and not _soru_ayi(s))
+
+
+_GELECEK_ODEME = r"ödeyece|ödenecek|yatıraca|ödemem gerek|ödemeliyim"
+
+
+def _gelecek_ay_odemesi(s):
+    """'aralıkta ne kadar vergi ödeyeceğim', 'ocakta ne kadar KDV ödenecek' -> o ay ('YYYY-AA') ya da None.
+    Yalnızca BU ay ve sonrası; geçmiş ay ve 'ödedim' soruları eski yollarda kalır."""
+    ay = _soru_ayi(s)
+    if ay and ay >= BUGUN[:7] and re.search(_GELECEK_ODEME, s) and not re.search(r"ödedi|ödendi|ödenmiş", s):
+        return ay
+    return None
 
 
 def _bugun_odersem_kalibi(s):
