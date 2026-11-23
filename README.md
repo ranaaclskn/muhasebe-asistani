@@ -79,6 +79,10 @@ ONAY YOLU (app/onay.py → app/bildirim.py → n8n)
 
 HATIRLATMA (scripts/05_hatirlatma.py → n8n)
   Ödenmemiş: gecikmiş + son tarihine ≤3 gün kalan ─> POST /webhook/hatirlatma ─> firmanın kayıtlı adresine e-posta
+
+ZAMANLAYICI (n8n Schedule Trigger → Execute Command → n8n/gorev.sh)
+  Her sabah 09:00 ─> gorev.sh hatirlatma  ─> scripts/05_hatirlatma.py ─> /webhook/hatirlatma
+  Her ayın 1'i 08:30 ─> gorev.sh aylik-rapor ─> scripts/06_aylik_rapor.py --gonder ─> /webhook/aylik-rapor (PDF ekli)
 ```
 
 ### Teknoloji
@@ -190,7 +194,8 @@ python scripts/05_hatirlatma.py          # her firmaya, gecikmiş + 3 gün için
 
 | Dosya | Görevi |
 |---|---|
-| `n8n/akislar.json` | İki akış: `Webhook (talep-onay)` → `Send Email` (belge ekli), `Webhook (hatirlatma)` → `Send Email` |
+| `n8n/akislar.json` | Beş akış: `Webhook (talep-onay)` → `Send Email` (belge ekli), `Webhook (hatirlatma)` → `Send Email`, `Webhook (aylik-rapor)` → `Send Email` (PDF ekli, muhasebeci CC); zamanlayıcılar: `Schedule (her sabah 09:00)` → `Execute Command` (hatırlatma), `Schedule (her ayın 1'i 08:30)` → `Execute Command` (aylık rapor) |
+| `n8n/gorev.sh` | Zamanlayıcının çağırdığı tek giriş noktası: yalnızca `hatirlatma` ve `aylik-rapor` görevlerini çalıştırır (başka komut reddedilir), çıktıyı `data/gorevler.log`'a da yazar |
 | `n8n/test_posta_kimligi.json` | n8n SMTP kimliği: `127.0.0.1:1025`, şifresiz (yalnız test posta kutusu için) |
 | `n8n/kur.sh`, `n8n/baslat.sh` | İçe aktarma/yayınlama ve n8n'i yalnız `127.0.0.1`'de başlatma |
 | `scripts/test_posta_kutusu.py` | Ek paket gerektirmeyen küçük SMTP sunucusu; e-postaları `.eml` olarak kaydeder |
@@ -198,6 +203,8 @@ python scripts/05_hatirlatma.py          # her firmaya, gecikmiş + 3 gün için
 **Gerçek e-posta göndermek için** n8n arayüzünde (Credentials) "Test posta kutusu (yerel)" kimliğini kendi SMTP hesabınızla (ör. Gmail uygulama şifresi) değiştirin ve firmaların kayıtlı adreslerini gerçek adreslerle güncelleyin; Python kodu değişmez.
 
 **Bellek:** Proje 6 GB RAM'li bir makinede geliştirildi. n8n belleği doldurunca sistem başka programları kapatabildiği için `kur.sh` ve `baslat.sh`, `systemd-run` varsa n8n'i bellek sınırlı bir "kafeste" çalıştırır (varsayılan 900 MB; `N8N_BELLEK=1200M bash n8n/baslat.sh` ile değiştirilir). Sınır aşılırsa yalnızca n8n durur. Gerekirse önce tarayıcı sekmelerini ve fazladan açık Streamlit pencerelerini kapatın.
+
+**Zamanlayıcı:** n8n açık olduğu sürece her sabah 09:00'da hatırlatma, her ayın 1'inde 08:30'da geçen ayın PDF raporu (firmaya, muhasebeci CC) kendiliğinden gönderilir (saat dilimi Europe/Istanbul). n8n o saatte kapalıysa o günün görevi atlanır; elle çalıştırmak için `bash n8n/gorev.sh hatirlatma` ya da `bash n8n/gorev.sh aylik-rapor`. Her çalıştırma yeni bir Python sürecidir, "bugün" tarihi her seferinde doğru hesaplanır; sonuçlar n8n "Executions" ekranında ve `data/gorevler.log`'da görünür. Zamanlayıcı n8n'in *Execute Command* düğümünü kullanır; n8n 2.x bu düğümü varsayılan olarak kapatır, `baslat.sh` ve `kur.sh` yalnızca bu düğümü açar (`NODES_EXCLUDE`). Güvenlik için n8n yalnızca `127.0.0.1`'de dinler ve düğüm yalnızca `gorev.sh`'yi sabit bir görev adıyla çağırır. Akışlar değiştiyse n8n kapalıyken `bash n8n/kur.sh` yeniden çalıştırılır.
 
 ### Aylık yönetici raporu (PDF)
 
@@ -209,6 +216,10 @@ python scripts/06_aylik_rapor.py                 # geçen ay, tüm firmalar -> d
 
 ```bash
 python scripts/06_aylik_rapor.py --ay 2026-09 --firma F001
+```
+
+```bash
+python scripts/06_aylik_rapor.py --gonder        # ayrıca e-postayla gönder (n8n ve test posta kutusu açık olmalı)
 ```
 
 PDF `fpdf2` ile üretilir; Türkçe karakterler için DejaVu Sans yazı tipi `app/fonts/` klasöründedir (serbest lisans, `LICENSE-DejaVu.txt`).
@@ -260,7 +271,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 234 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 257 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, muhasebeci görünümü, zamanlayıcı, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -282,7 +293,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 234/234 |
+| Birim testleri (`pytest`) | 257/257 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -319,7 +330,7 @@ muhasebe-asistani/
 │   ├── 01_veritabani_kur.py
 │   ├── 02_belge_uret.py
 │   ├── 03_indeksle.py
-│   ├── 05_hatirlatma.py # ödeme hatırlatma e-postaları (n8n)
+│   ├── 05_hatirlatma.py # ödeme hatırlatma e-postaları (n8n; zamanlayıcı her sabah 09:00)
 │   ├── 06_aylik_rapor.py # tüm firmaların aylık PDF raporu (data/raporlar/)
 │   ├── test_posta_kutusu.py  # yerel test SMTP sunucusu (127.0.0.1:1025)
 │   ├── soru_dene.py     # geliştirici için adım adım deneme aracı
@@ -332,7 +343,7 @@ muhasebe-asistani/
 │   └── analiz_gorunum.py # uyarı kartları, takvim ızgarası, sağlık puanı halkası, cari tablo, senaryo grafiği
 ├── tests/               # pytest testleri (veritabanının geçici kopyasında, model gerekmez)
 ├── .streamlit/config.toml  # tema ve yalnızca 127.0.0.1'de çalışma ayarı
-├── n8n/                 # akislar.json, test_posta_kimligi.json, kur.sh, baslat.sh, AI Agent sistem mesajı
+├── n8n/                 # akislar.json, test_posta_kimligi.json, kur.sh, baslat.sh, gorev.sh (zamanlayıcı), AI Agent sistem mesajı
 ├── data/
 │   ├── csv/             # kurgusal veri: firmalar, kullanıcılar, yükümlülükler, faturalar, belgeler, test seti
 │   ├── belgeler/        # 02 tarafından üretilen 40 .txt belge
@@ -386,8 +397,8 @@ muhasebe-asistani/
 - [x] Asistan analizlere bağlandı: sağlık puanı, cari, senaryo ve uyarı soruları sohbetten cevaplanır
 - [x] Aylık yönetici raporu (PDF): firma panelinden, muhasebeci portföyünden ve komut satırından
 - [x] Muhasebecinin firmaya girmesi: portföyden firmanın paneli salt okunur açılır, açılış denetime yazılır
-- [x] pytest birim testleri (234 test)
+- [x] pytest birim testleri (257 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
-- [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
+- [x] n8n zamanlayıcısı: her sabah 09:00 ödeme hatırlatması, her ayın 1'i aylık PDF raporu e-postası
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)
 - [ ] Temiz kurulum provası

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # n8n'i YALNIZCA bu bilgisayardan erişilecek şekilde başlatır (varsayılan npx n8n tüm ağa açık dinler).
-# Arayüz: http://localhost:5678   Webhook'lar: http://localhost:5678/webhook/talep-onay , /webhook/hatirlatma
+# Arayüz: http://localhost:5678   Webhook'lar: /webhook/talep-onay , /webhook/hatirlatma , /webhook/aylik-rapor
+# Zamanlayıcılar (Europe/Istanbul): her sabah 09:00 hatırlatma, her ayın 1'i 08:30 aylık rapor (n8n açıkken çalışır)
 # Çalıştır (proje klasöründen):  bash n8n/baslat.sh     Durdurmak: Ctrl + C
 #
 # Bellek koruması: bu proje 6 GB RAM'li bir makinede geliştirildi; n8n belleği doldurunca sistem başka
@@ -10,6 +11,10 @@ set -euo pipefail
 export N8N_LISTEN_ADDRESS=127.0.0.1 N8N_DIAGNOSTICS_ENABLED=false
 export GENERIC_TIMEZONE=Europe/Istanbul TZ=Europe/Istanbul
 export NODE_OPTIONS="--max-old-space-size=600"
+# Zamanlayıcı akışları "Execute Command" düğümüyle n8n/gorev.sh'yi çağırır. n8n 2.x bu düğümü varsayılan olarak
+# kapatır; burada YALNIZCA o açılır (localFileTrigger kapalı kalır). n8n yalnızca 127.0.0.1'de dinler ve
+# gorev.sh iki sabit görev dışında hiçbir komutu kabul etmez.
+export NODES_EXCLUDE='["n8n-nodes-base.localFileTrigger"]'
 BELLEK="${N8N_BELLEK:-900M}"
 if command -v systemd-run >/dev/null && systemd-run --user --scope -q true 2>/dev/null; then
     echo "n8n bellek sınırı: $BELLEK (yalnızca n8n etkilenir)"

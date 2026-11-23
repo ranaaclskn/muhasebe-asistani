@@ -7,3 +7,4 @@ __pycache__/
 data/langgraph_checkpoint.sqlite*
 data/posta_kutusu/
 data/raporlar/
+data/gorevler.log

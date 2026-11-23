@@ -13,6 +13,8 @@ Akış:
                       -> başarılı: 'Gönderildi' (talep 'Tamamlandı') + denetim kaydı
                       -> n8n kapalı/hata: 'Kuyrukta' kalır, panelden "Tekrar dene" ile sonra gönderilir
 Hatırlatma: scripts/05_hatirlatma.py -> hatirlatma_gonder() -> POST {N8N_URL}/webhook/hatirlatma
+Aylık rapor: scripts/06_aylik_rapor.py --gonder -> aylik_rapor_gonder() -> POST {N8N_URL}/webhook/aylik-rapor (PDF ekli)
+Zamanlayıcı: n8n Schedule Trigger -> n8n/gorev.sh -> yukarıdaki iki betik (her sabah 09:00 / her ayın 1'i 08:30)
 
 Kontrol (proje klasöründen):  python -m pytest -q tests/test_bildirim.py
 """
@@ -201,3 +203,42 @@ def hatirlatma_gonder(firma_id, gun=3):
     except RuntimeError as e:
         return {"firma_id": firma_id, "ok": False, "gonderildi": False, "adet": len(odemeler), "hata": str(e)}
     return {"firma_id": firma_id, "ok": True, "gonderildi": True, "adet": len(odemeler), "eposta": eposta}
+
+
+# ---------- Aylık yönetici raporu e-postası (her ayın 1'inde n8n zamanlayıcısı tetikler) ----------
+def muhasebeci_epostasi():
+    """Muhasebecinin KAYITLI adresi (rapor e-postasında bilgi/CC olarak)."""
+    con = baglan()
+    try:
+        r = con.execute("SELECT eposta FROM kullanicilar WHERE rol = 'muhasebeci' ORDER BY id LIMIT 1").fetchone()
+        return r["eposta"] if r else None
+    finally:
+        con.close()
+
+
+def aylik_rapor_gonder(firma_id, ay=None):
+    """Firmanın aylık PDF raporunu kayıtlı adresine (muhasebeci CC) n8n ile gönderir.
+    Rakamlar ve PDF app/rapor.py'den gelir; e-posta metnindeki özet de aynı veriden yazılır (model yok)."""
+    from app.rapor import dosya_adi, rapor_pdf, rapor_verisi, varsayilan_ay  # rapor yalnız burada gerekli
+
+    ay = ay or varsayilan_ay()
+    v = rapor_verisi(firma_id, ay)
+    o, g = v["ozet"], v["saglik"]
+    onemli = [u for u in v["uyarilar"] if u["seviye"] in ("kritik", "uyari")]
+    eposta = kayitli_eposta(firma_id)
+    metin = (f"Merhaba,\n\n{v['unvan']} için {v['ay_adi']} aylık yönetici raporu ektedir.\n\n"
+             f"- Tahsilat: {tl(o['giris'])}\n- Ödeme: {tl(o['cikis'])}\n"
+             f"- Ayın neti: {('+' if o['net'] > 0 else '') + tl(o['net'])}\n"
+             f"- Finansal sağlık puanı: {g['puan']} / 100 ({g['etiket']})\n"
+             + (f"\nDikkat edilmesi gerekenler:\n" + "\n".join(f"- {u['baslik']}" for u in onemli) + "\n"
+                if onemli else "\nÖnemli bir uyarı yok.\n")
+             + "\nRakamlar kayıtlardan hesaplanmıştır. Bu e-posta Kişisel Muhasebe Asistanı tarafından "
+               "otomatik gönderilmiştir.")
+    veri = {"firma_id": firma_id, "eposta": eposta, "cc": muhasebeci_epostasi() or "",
+            "konu": f"{v['ay_adi']} aylık rapor · {v['unvan']}", "metin": metin}
+    ek = (dosya_adi(firma_id, ay), rapor_pdf(firma_id, ay, veri=v), "application/pdf")
+    try:
+        _n8n("aylik-rapor", veri, ek)
+    except RuntimeError as e:
+        return {"firma_id": firma_id, "ay": ay, "ok": False, "hata": str(e)}
+    return {"firma_id": firma_id, "ay": ay, "ok": True, "eposta": eposta, "cc": veri["cc"], "dosya": ek[0]}

@@ -137,5 +137,198 @@
       "timezone": "Europe/Istanbul"
     },
     "pinData": {}
+  },
+  {
+    "id": "MuhasebeAylikRp1",
+    "name": "Muhasebe · Aylık rapor e-postası",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "aylik-rapor",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "d038d7ef-fb58-5909-8e0e-d7bf7043771a",
+        "name": "Aylık rapor (webhook)",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "a2273cab-5090-538d-a3b2-0459cc14fb2d"
+      },
+      {
+        "parameters": {
+          "fromEmail": "Muhasebe Asistanı <asistan@demo.local>",
+          "toEmail": "={{ $json.body.eposta }}",
+          "subject": "={{ $json.body.konu }}",
+          "emailFormat": "text",
+          "text": "={{ $json.body.metin }}",
+          "options": {
+            "appendAttribution": false,
+            "fileAttachments": "ek",
+            "ccEmail": "={{ $json.body.cc }}"
+          }
+        },
+        "id": "66c5e3f6-c21b-5807-905e-3cfdec84e5e0",
+        "name": "Raporu e-postayla gönder (PDF ekli)",
+        "type": "n8n-nodes-base.emailSend",
+        "typeVersion": 2.1,
+        "position": [
+          260,
+          0
+        ],
+        "webhookId": "e0a91549-cd2b-50bd-9462-6b443854075c",
+        "credentials": {
+          "smtp": {
+            "id": "MuhasebeSmtpYrl1",
+            "name": "Test posta kutusu (yerel)"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Aylık rapor (webhook)": {
+        "main": [
+          [
+            {
+              "node": "Raporu e-postayla gönder (PDF ekli)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "Europe/Istanbul"
+    },
+    "pinData": {}
+  },
+  {
+    "id": "MuhasebeSabah091",
+    "name": "Muhasebe · Zamanlayıcı: her sabah 09:00 hatırlatma",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 9 * * *"
+              }
+            ]
+          }
+        },
+        "id": "2112067f-ee81-5aa9-82b2-b9fa91c0548a",
+        "name": "Her sabah 09:00",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Geciken ve 3 gün içinde son tarihi gelen ödemeler için hatırlatma e-postası",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "executeOnce": true,
+          "command": "bash \"__PROJE__/n8n/gorev.sh\" hatirlatma"
+        },
+        "id": "3fa86b66-947a-59b0-88d5-bea57304c95a",
+        "name": "Görevi çalıştır (hatirlatma)",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          260,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Her sabah 09:00": {
+        "main": [
+          [
+            {
+              "node": "Görevi çalıştır (hatirlatma)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "Europe/Istanbul"
+    },
+    "pinData": {}
+  },
+  {
+    "id": "MuhasebeAyBasi01",
+    "name": "Muhasebe · Zamanlayıcı: her ayın 1'i aylık rapor",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "30 8 1 * *"
+              }
+            ]
+          }
+        },
+        "id": "68564630-6266-5b78-8e47-b50320e800e6",
+        "name": "Her ayın 1'i 08:30",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Geçen ayın PDF yönetici raporu firmaya (muhasebeci CC)",
+        "notesInFlow": true
+      },
+      {
+        "parameters": {
+          "executeOnce": true,
+          "command": "bash \"__PROJE__/n8n/gorev.sh\" aylik-rapor"
+        },
+        "id": "137f44d3-7720-5743-b242-9b630f037785",
+        "name": "Görevi çalıştır (aylik-rapor)",
+        "type": "n8n-nodes-base.executeCommand",
+        "typeVersion": 1,
+        "position": [
+          260,
+          0
+        ]
+      }
+    ],
+    "connections": {
+      "Her ayın 1'i 08:30": {
+        "main": [
+          [
+            {
+              "node": "Görevi çalıştır (aylik-rapor)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "timezone": "Europe/Istanbul"
+    },
+    "pinData": {}
   }
 ]
