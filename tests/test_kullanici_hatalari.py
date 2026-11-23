@@ -626,3 +626,10 @@ def test_bekleyen_soruda_yeni_soru():  # "Hangi beyanname?" sorusuna yeni soru y
     assert not konu_degisti_mi({"tur": "onay"}, "evet")
     assert konu_degisti_mi({"tur": "alan", "alan": "emir"}, "KDV ne zaman ödenir?")
     assert not konu_degisti_mi({"tur": "alan", "alan": "emir"}, "Eylül KDV beyannamemi gönder")
+
+
+def test_tek_odenen_kayit_sablonla():  # "Geçen ay KDV ödediniz 44.307,46 TL." (tarih ve dönem yoktu)
+    n = kural_duzelt("geçen ay ne kadar KDV ödedim", {"niyet": "kayit", "sorgu": "odenenler", "parametreler": ["2026-10"]})
+    r = cevapla_kayit("geçen ay ne kadar KDV ödedim", "F001", n)
+    assert r["yontem"] == "liste" and "44.307,46 TL" in r["cevap"] and "27.10.2026" in r["cevap"]
+    assert "Eylül 2026" in r["cevap"] and "21.450,41" not in r["cevap"]  # yalnız KDV

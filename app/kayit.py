@@ -490,8 +490,10 @@ def cevapla_kayit(soru, firma_id, niyet):
     veri, toplam = veri_hazirla(sorgu, satirlar)
     # Kaynak etiketi her zaman metin: resmî kayıtlar 'Y018', kullanıcının eklediği kayıtlar 'plan#3'
     kaynaklar = [f"plan#{s['id']}" if "yon" in s else str(s["id"]) for s in satirlar]
-    # ay_odemeleri tek kayıtta da şablon: model "sigorta primi" sorusunda son tarihi atıp bozuk cümle kuruyordu
-    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
+    # Liste sorguları tek kayıtta da şablon: model tarihi/dönemi atıp bozuk cümle kuruyordu
+    # ("Sigorta primi bu ayki ödememiz gereken...", "Geçen ay KDV ödediniz 44.307,46 TL.")
+    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "odenenler", "yil_odenenler",
+                                      "odeme_araligi", "gec_odenenler", "gecikmis", "yaklasanlar", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
         return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,
