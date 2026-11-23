@@ -63,6 +63,9 @@ def satir_metni(s):
                 f"{tl(s['tutar_tl'])} (KDV oranı %{int(s['kdv_orani'] * 100)})")
     if "yon" in s:  # kullanıcının eklediği planlı ödeme / tahsilat
         ne = "ödenecek" if s["yon"] == "Gider" else "tahsil edilecek"
+        if s["tarih"] < BUGUN:  # tarihi geçmiş: "tahsil edilecek" demek yanlış; durumu tabloda yok
+            fiil = "ödendi" if s["yon"] == "Gider" else "tahsil edildi"
+            ne = f"{ne}ti — tarihi geçti, {fiil} mi kontrol edin"
         karsi = f" ({s['karsi_taraf']})" if s.get("karsi_taraf") else ""
         return f"- {tarih_tr(s['tarih'])} · {s['aciklama']}{karsi}: {tl(s['tutar_tl'])} {ne}"
     metin = (f"- {s['tur']}, {donem_tr(s['donem'])} dönemi: {tl(s['tutar_tl'])}, "
@@ -457,7 +460,8 @@ def cevapla_kayit(soru, firma_id, niyet):
     veri, toplam = veri_hazirla(sorgu, satirlar)
     # Kaynak etiketi her zaman metin: resmî kayıtlar 'Y018', kullanıcının eklediği kayıtlar 'plan#3'
     kaynaklar = [f"plan#{s['id']}" if "yon" in s else str(s["id"]) for s in satirlar]
-    if len(satirlar) > 1 or sorgu in ("planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
+    # ay_odemeleri tek kayıtta da şablon: model "sigorta primi" sorusunda son tarihi atıp bozuk cümle kuruyordu
+    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
         return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,

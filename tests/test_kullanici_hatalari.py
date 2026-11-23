@@ -552,3 +552,19 @@ def test_son_odeme_tarihi_tatile_dusmez():  # Ekim KDV'si 28.11.2026 cumartesi g
     assert kotu == []
     s = db.calistir("durum", "F001", "KDV", "2026-10")
     assert s[0]["son_odeme_tarihi"] == "2026-11-30"
+
+
+def test_tek_ay_odemesi_sablonla_ve_son_tarihli():  # model son tarihi atıp "ödememiz gereken" diyordu
+    r = cevapla_kayit("bu ayki sigorta primi ödemem ne kadar", "F001",
+                      {"sorgu": "ay_odemeleri", "parametreler": ["2026-11", "SGK primi"]})
+    assert r["yontem"] == "liste" and "54.364,86 TL" in r["cevap"] and "30.11.2026" in r["cevap"]
+    assert "54.938,65" not in r["cevap"]
+
+
+def test_gecmis_tahsilat_edilecek_denmez(monkeypatch):  # 11.11'deki tahsilata 23.11'de "tahsil edilecek" diyordu
+    import app.kayit as kayit
+    monkeypatch.setattr(kayit, "BUGUN", "2026-11-23")
+    s = {"yon": "Gelir", "tarih": "2026-11-11", "aciklama": "Kira", "tutar_tl": 1000.0, "karsi_taraf": None}
+    assert "tarihi geçti, tahsil edildi mi kontrol edin" in kayit.satir_metni(s)
+    assert kayit.satir_metni({**s, "tarih": "2026-11-23"}).endswith("tahsil edilecek")  # bugün: henüz geçmedi
+    assert "ödendi mi" in kayit.satir_metni({**s, "yon": "Gider"})
