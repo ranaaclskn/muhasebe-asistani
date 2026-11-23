@@ -159,7 +159,7 @@ def cari_html(liste, baslik):
 def saglik_html(g):
     renk = "#1a7f37" if g["puan"] >= 80 else "#2a78d6" if g["puan"] >= 60 else "#d29b00" if g["puan"] >= 40 else "#b42318"
     bilesen = "".join(
-        f'<div class="bilesen"><div class="ust"><b>{a}</b><span>{p:.1f} / {m}</span></div>'
+        f'<div class="bilesen"><div class="ust"><b>{a}</b><span>{f"{p:.1f}".replace(".", ",")} / {m}</span></div>'
         f'<div class="cubuk"><i style="width:{p / m * 100:.0f}%"></i></div><div class="ac">{escape(ac)}</div></div>'
         for a, p, m, ac in g["bilesenler"])
 

@@ -12,6 +12,7 @@ import re
 from langchain_ollama import ChatOllama
 from app.config import BUGUN, CSV_DIR, LLM_MODEL, OLLAMA_URL
 from app.db import SORGULAR, TURLER, baglan, tur_normalize
+from app.analiz_sorulari import analiz_kalibi
 from app.emirler import emir_cikar, emir_kalibi
 
 NIYETLER = ["kayit", "belge", "islem", "kapsam_disi"]
@@ -190,6 +191,11 @@ def kural_duzelt(soru, sonuc):
     1) Alan kelimesi geçen soru kapsam dışı olamaz -> belge.
     2) Soruda açıkça ay/yıl veya tür yazıyorsa parametreyi sorudan al (model ayı/yılı karıştırabiliyor)."""
     s = _kucuk(soru)
+    # Analiz soruları (sağlık puanı, cari, senaryo, uyarılar) en önce: "satışlar düşerse ne olur" aşağıdaki
+    # "varsayım -> belge" kuralına gitmesin; cevabı kod üretir (app/analiz_sorulari.py).
+    analiz = analiz_kalibi(soru)
+    if analiz:
+        return analiz
     # Ücret/maaş tutarları veritabanında YOK, yalnızca MUHSGK beyannamelerinde (brüt ücret) var -> belge.
     # (Aksi hâlde model muhtasar/SGK ödemelerini "ücret" diye sunuyordu.)
     if re.search(r"ücret|maaş|bordro", s) and sonuc["niyet"] != "belge":

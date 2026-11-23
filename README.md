@@ -24,6 +24,10 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
 | "Ekim faturalarımı göster" | Ayın alış ve satış faturaları; alış ve satış toplamları **ayrı** verilir | SQLite (`faturalar`) |
 | "Kaç kişi çalışıyor?" / "Çalışanlar kimler?" / "Şoförlere ne kadar maaş ödedim?" | Çalışan listesi, kıdem, görev bazında maaş toplamları ve karşılaştırmalar (hesabı Python yapar) | SQLite (`calisanlar`, `bordrolar`) |
 | "Gecikmiş ödemelerimin faizi ne kadar?" / "Geciken ödemeler faizleriyle toplam ne kadar?" | Gecikmiş borçlar, kaç gün geciktiği ve **tahmini gecikme zammı** (ana borç × aylık oran / 30 × gün) ile toplam. SGK primi için tahmin verilmez (gecikme cezası + zammı SGK hesaplar) | SQLite + resmî oran (`.env`) |
+| "Finansal sağlık puanım kaç, neden düşük?" / "Şirketim nasıl gidiyor?" | 0–100 sağlık puanı, bileşenleri, göstergeler ve puanı en çok düşüren iki alan için öneri | Kayıtlar (app/analiz.py) |
+| "En çok satış yaptığım müşteri kim?" / "En büyük tedarikçim?" / "Ege Otel Grubu ekstresi" | Müşteri/satıcı dağılımı (pay, tutar, fatura sayısı) ya da adı geçen carinin özeti ve son işlemleri | SQLite (`faturalar`) |
+| "Satışlar %10 düşerse 6 ay sonra durumum ne olur?" / "2 kişi işe alırsam?" / "Maliyetler %5 artarsa 1 yıl sonra?" | Yüzde, yön, kişi sayısı ve süreyi **kod** sorudan okur; mevcut gidişat ile senaryonun birikmiş nakdi ve farkı | Kayıtlar (senaryo) |
+| "Nelere dikkat etmeliyim?" / "Riskler neler?" | Panel uyarıları önem sırasıyla (gecikme, yaklaşan son tarih, müşteri yoğunlaşması, eksi ay, planlı ödeme) | Kayıtlar |
 | "Gecikme zammı oranı nedir?" / "Nasıl hesaplanır?" | Resmî oran (aylık %3,7; 6183 s. Kanun md. 51, 13.11.2025'ten beri), günlük oran ve örnek hesap | Resmî oran (`.env`) |
 
 **Arayüz (Streamlit):** sade, kurumsal bir tasarım (lacivert–gri tema, ince çerçeveli kartlar, emoji yerine ikonlar; tema `.streamlit/config.toml` içinde).
@@ -108,6 +112,7 @@ HATIRLATMA (scripts/05_hatirlatma.py → n8n)
 **Tasarım ilkesi: "LLM yorumlar, kod denetler."** Küçük model esnek Türkçeyi anlamakta iyidir ama kesin kurallarda hata yapabilir. Bu yüzden:
 - Model çıktısı şemaya göre doğrulanır, parametreler türlerine göre yerine oturtulur.
 - Kesin kalıplar ("bu ay ödenecek", "son 3 ay", "gecikmiş", "kaç çalışan") kod kurallarıyla düzeltilir.
+- Analiz soruları (sağlık puanı, cari, senaryo, uyarılar) modele gitmeden **kodla** tanınır ve cevaplanır (`app/analiz_sorulari.py`); rakamlar paneldeki sekmelerle aynı fonksiyonlardan gelir. "2 kişi işe alırsam" gibi koşullu cümleler senaryodur, geçmiş işe alım (bordro) sorusu değildir.
 - Kayıt cevaplarında uydurma sayı, eksik ana rakam ya da "ödendi/ödenmedi" çelişkisi varsa model cevabı atılır ve şablon cevap kullanılır.
 - Belge cevaplarında cevaptaki her tutar ve tarih kaynak belgede **birebir** geçmek zorundadır (kanıt eşleştirme). Kaynak, bu kanıtı içeren dosya olarak belirlenir.
 
@@ -224,6 +229,10 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 - SGK primini geç ödersem ne olur?
 - Son beyannamemi e-postama gönder.
 - Kaç kişi çalışıyor? / Çalışanlar kimler?
+- Finansal sağlık puanım kaç, neden düşük?
+- En çok satış yaptığım müşteri kim?
+- Satışlar %10 düşerse 6 ay sonra durumum ne olur?
+- Nelere dikkat etmeliyim?
 - Ekim faturalarımı göster.
 - Gecikmiş ödemelerimin faizi ne kadar?
 - Gecikme zammı oranı nedir?
@@ -235,7 +244,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 159 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 208 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -257,7 +266,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 159/159 |
+| Birim testleri (`pytest`) | 208/208 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -280,6 +289,7 @@ muhasebe-asistani/
 │   ├── bildirim.py      # n8n köprüsü: onay e-postası (kuyruk, tekrar deneme), ödeme hatırlatması
 │   ├── nakit.py         # hareket dökümü ve nakit akış tablosu (kod planı, kod × ay matrisi, devir, kümülatif)
 │   ├── analiz.py        # uyarılar, ödeme takvimi, yaşlandırma, cari hesap/ekstre, finansal sağlık puanı, senaryo
+│   ├── analiz_sorulari.py # bu analizleri sohbetten sorulabilir yapar: soru kalıbı + kodla üretilen cevap
 │   ├── rag.py           # Chroma arama → rerank → JSON cevap → kanıt eşleştirme
 │   ├── dogrulama.py     # lexical rerank, dönem çıkarımı, kanıt/atıf doğrulama
 │   ├── akis.py          # LangGraph: niyet → {sql, rag, talep, reddet} → logla
@@ -354,7 +364,8 @@ muhasebe-asistani/
 - [x] Tahmini gecikme zammı ve gecikme zammı oranı cevabı
 - [x] Nakit akış tablosu ve hareket dökümü (Excel indirme), muhasebeci firma portföyü
 - [x] Uyarılar, ödeme takvimi, cari hesaplar, yaşlandırma, finansal sağlık puanı, senaryo simülatörü
-- [x] pytest birim testleri (159 test)
+- [x] Asistan analizlere bağlandı: sağlık puanı, cari, senaryo ve uyarı soruları sohbetten cevaplanır
+- [x] pytest birim testleri (208 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)

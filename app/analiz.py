@@ -163,14 +163,14 @@ def gostergeler(firma_id, son_n=6):
     def sinirla(x):
         return max(0.0, min(1.0, x))
     bilesenler = [  # (ad, puan, en yüksek, açıklama)
-        ("Zamanında ödeme", 25 * zamaninda_oran, 25, f"Son tarihi geçen yükümlülüklerin %{zamaninda_oran * 100:.0f}'i "
-                                                    "zamanında ödenmiş"),
+        ("Zamanında ödeme", 25 * zamaninda_oran, 25, f"Son tarihi geçen yükümlülüklerde zamanında ödeme oranı "
+                                                    f"%{zamaninda_oran * 100:.0f}"),
         ("Kârlılık (nakit)", 25 * sinirla(net / satis / 0.15), 25, "Net nakit marjı %15 ve üstü tam puan"),
         ("Gecikme", max(0, 20 - 7 * geciken), 20, f"{geciken} gecikmiş ödeme (her biri −7)"),
         ("Müşteri dağılımı", 15 * (1 - sinirla((en_buyuk_pay - 0.25) / 0.5)), 15,
          f"En büyük müşterinin payı %{en_buyuk_pay * 100:.0f} (%25'e kadar tam puan)"),
-        ("Nakit dayanıklılığı", 15 * sinirla(karsilama / 3), 15, f"Birikmiş nakit {karsilama:.1f} aylık gideri "
-                                                                f"karşılıyor (3 ay ve üstü tam puan)"),
+        ("Nakit dayanıklılığı", 15 * sinirla(karsilama / 3), 15,
+         f"Birikmiş nakit {karsilama:.1f}".replace(".", ",") + " aylık gideri karşılıyor (3 ay ve üstü tam puan)"),
     ]
     puan = round(sum(b[1] for b in bilesenler))
     return {

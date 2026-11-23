@@ -33,7 +33,8 @@ st.set_page_config(page_title="Muhasebe Asistanı", page_icon=":material/account
                    initial_sidebar_state="expanded")
 
 ONERILER = ["Bu ay toplam ne kadar vergi ve prim ödeyeceğim?", "Gecikmiş ödemem var mı?",
-            "Ekim SGK primi ödendi mi?", "En yakın son ödeme tarihi hangisi?",
+            "Finansal sağlık puanım kaç?", "En çok satış yaptığım müşteri kim?",
+            "Satışlar %10 düşerse 6 ay sonra durumum ne olur?", "Nelere dikkat etmeliyim?",
             "Son muhtasar beyannamemi e-postama gönder."]
 ASISTAN_AVATAR, KULLANICI_AVATAR = ":material/support_agent:", ":material/person:"
 
@@ -281,7 +282,8 @@ def asistan_bolumu(k, firma_id):
             if not st.session_state.mesajlar:
                 with st.chat_message("assistant", avatar=ASISTAN_AVATAR):
                     st.markdown(f"Merhaba, {k['ad']}. Ödemeleriniz, vergi ve primleriniz, maaşlar, faturalar ve "
-                                "planladığınız tahsilatlar hakkında soru sorabilirsiniz. Aşağıdaki sık sorulan "
+                                "planladığınız tahsilatlar hakkında soru sorabilirsiniz; finansal sağlık puanınızı, "
+                                "müşteri dağılımınızı ve “satışlar düşerse ne olur?” gibi senaryoları da sorabilirsiniz. Aşağıdaki sık sorulan "
                                 "sorulardan biriyle başlayabilir ya da kendi sorunuzu yazabilirsiniz.")
             for m in st.session_state.mesajlar:  # önceki mesajları yeniden çiz
                 with st.chat_message(m["rol"], avatar=ASISTAN_AVATAR if m["rol"] == "assistant" else KULLANICI_AVATAR):

@@ -21,6 +21,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from app.analiz_sorulari import analiz_kalibi
 from app.config import VERI_DIR
 from app.db import belge_bul, firma_talepleri, kayitli_eposta, planli_islem_ekle, talep_ekle
 from app.emirler import (EKSIK_SORULARI, alan_cozumle, emir_cikar, evet_mi, iptal_mi,
@@ -68,6 +69,11 @@ def niyet_dugumu(d: Durum):
         return {"niyet": {"niyet": "baska_firma", "firma": baska}}
     if talep_sorgu_kalibi(d["soru"]):  # "3 numaralı talebim ne durumda" (atölye SORGULA kolu)
         return {"niyet": {"niyet": "sorgula"}}
+    # Analiz soruları (finansal sağlık, cari, senaryo, uyarılar): bordrodan ÖNCE ("2 kişi işe alırsam"
+    # bir senaryodur, geçmiş işe alım sorusu değil). Cevabı app/analiz_sorulari.py kodla üretir.
+    analiz = analiz_kalibi(d["soru"])
+    if analiz and not emir_kalibi(d["soru"]):
+        return {"niyet": analiz}
     # Çalışan / maaş / bordro: modelden ÖNCE kod tanır ("Ayşe'ye ne kadar ödedim" modelde vergi
     # ödemelerine gidiyordu). Emir cümleleri ("bordroyu gönder") emir kolunda kalır.
     if not emir_kalibi(d["soru"]) and bordro_kalibi(d["soru"], d["firma_id"]):
