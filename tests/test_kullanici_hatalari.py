@@ -667,3 +667,114 @@ def test_ay_basi_bu_ay_tahmin_ve_gecikmis(monkeypatch):  # 2 Aralık: "bu ay ne 
                       {"sorgu": "ay_odemeleri", "parametreler": ["2026-12"]})["cevap"]
     assert "Aralık 2026 için henüz kayıtlı yükümlülük yok" in c and "tahmin" in c
     assert "gecikmiş ödemeniz var" in c and "Geçici vergi" in c
+
+
+# --- 2026-11-24 sunum seti (222 soru, 2 Aralık) hataları ---
+def _aralik(monkeypatch):
+    import app.kayit as kayit
+    import app.niyet as niyet
+    for m in (db, kayit, niyet):
+        monkeypatch.setattr(m, "BUGUN", "2026-12-02")
+
+
+@pytest.mark.parametrize("soru,beklenen", [
+    ("Eylul kdv odendi mi", "eylül kdv ödendi mi"), ("gecen ay sgk ye ne kadar yatirdik", "geçen ay sgk ye ne kadar yatırdık"),
+    ("aralikta ne kadar sgk odicez", "aralıkta ne kadar sgk ödeyeceğiz")])
+def test_turkce_karaktersiz(soru, beklenen):
+    from app.niyet import yazim_duzelt
+    assert yazim_duzelt(soru).lower() == beklenen
+
+
+@pytest.mark.parametrize("soru", ["son gün tatile denk gelirse ne oluyor", "En yüksek maaşlı çalışanımız kim?"])
+def test_senaryo_yanlis_tetiklenmez(soru):
+    from app.analiz_sorulari import analiz_kalibi
+    assert (analiz_kalibi(soru) or {}).get("sorgu") != "senaryo"
+
+
+def test_kar_marji_saglik():
+    from app.analiz_sorulari import analiz_kalibi
+    assert analiz_kalibi("Net kâr marjımız kaç?")["sorgu"] == "saglik"
+
+
+@pytest.mark.parametrize("soru,sorgu,param", [
+    ("Aralık ayında devlete ne kadar ödeme yapacağız?", "ay_odemeleri", ["2026-12"]),
+    ("bu ay kdv ne kadar gelir sence", "ay_odemeleri", ["2026-12", "KDV"]),
+    ("aralık sgk primimiz ne kadar olur", "ay_odemeleri", ["2026-12", "SGK primi"]),
+    ("ocak ayında ne kadar vergi öderim", "ay_odemeleri", ["2027-01"]),
+    ("Geçici vergi kaç gündür gecikmiş?", "bugun_odersem", ["Geçici vergi"]),
+    ("Gecikmiş ödemeyi bugün kapatırsam cebimden ne çıkar?", "bugun_odersem", []),
+    ("Bu ay giren çıkan para ne kadar", "nakit_plani", ["2026-12"]),
+    ("Geçici vergiyi ödedik mi?", "siradaki_tur", ["Geçici vergi"]),
+    ("son sgk ödemem ne zamandı", "odeme_gecmisi", ["SGK primi"]),
+    ("KDV'yi en geç ne zaman ödemem lazım?", "siradaki_tur", ["KDV"]),
+    ("Aralık SGK priminin son günü ne?", "siradaki_tur", ["SGK primi", "2026-12"]),
+    ("Ayın 5'inde ne ödeyeceğim?", "gun_odemeleri", ["2026-12-05"]),
+    ("Dolar ne olur sence?", None, []),
+])
+def test_sunum_yonlendirme(soru, sorgu, param, monkeypatch):
+    _aralik(monkeypatch)
+    n = kural_duzelt(soru, {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]})
+    assert n.get("sorgu") == sorgu and n.get("parametreler") == param, n
+
+
+def test_ekim_kdv_son_odeme_gunu_yazilir():  # ödenmiş kayıtta son gün yoktu ("son ödeme günü neydi")
+    c = cevapla_kayit("x", "F001", {"sorgu": "durum", "parametreler": ["KDV", "2026-09"]})["cevap"]
+    assert "son ödeme tarihi 28.10.2026" in c and "27.10.2026 tarihinde ödendi" in c
+
+
+def test_son_tarih_kayit_yoksa_yasal_takvim(monkeypatch):  # ay başı: "kayıtlarınızda yok" diyordu
+    _aralik(monkeypatch)
+    con = db.baglan()
+    con.execute("UPDATE yukumlulukler SET durum='Ödendi', odeme_tarihi='2026-11-27' WHERE firma_id='F001' AND tur='KDV'")
+    con.commit()
+    c = cevapla_kayit("x", "F001", {"sorgu": "siradaki_tur", "parametreler": ["KDV"]})["cevap"]
+    assert "28.12.2026" in c and "Kasım 2026 dönemi" in c and "tahmini" in c and "tarihinde ödendi" in c
+    c = cevapla_kayit("x", "F001", {"sorgu": "siradaki_tur", "parametreler": ["SGK primi", "2026-12"]})["cevap"]
+    assert "31.12.2026" in c
+
+
+def test_yaklasanlar_planli_odemeleri_de_icerir(monkeypatch):  # ay başında "kayıt yok" diyordu
+    _aralik(monkeypatch)
+    db.planli_islem_ekle("F001", 1, "Gider", "2026-12-05", 42000, "Depo kirası", "Mert Gayrimenkul")
+    r = cevapla_kayit("x", "F001", {"sorgu": "yaklasanlar", "parametreler": []})
+    assert "42.000,00" in r["cevap"]
+    r = cevapla_kayit("x", "F001", {"sorgu": "en_yakin", "parametreler": []})
+    assert "Depo kirası" in r["cevap"] and "05.12.2026" in r["cevap"]
+
+
+def test_planli_karsi_taraf_adiyla(monkeypatch):  # "Anadolu Lojistik ne zaman ödeyecek?" ödeme geçmişine gidiyordu
+    _aralik(monkeypatch)
+    from app.kayit import planli_eslesme
+    no = db.planli_islem_ekle("F001", 1, "Gelir", "2026-12-10", 118500, "Toptan satış tahsilatı", "Anadolu Lojistik")
+    no2 = db.planli_islem_ekle("F001", 1, "Gider", "2026-12-15", 86400, "Un ve yağ alımı (tedarikçi)", "Trakya Un")
+    assert planli_eslesme("Anadolu Lojistik ne zaman ödeyecek?", "F001") == [str(no)]
+    assert planli_eslesme("Tedarikçiye ne zaman ödeme yapacağız?", "F001") == [str(no2)]
+    assert planli_eslesme("Kasımda kaç satış faturası kestik?", "F001") == []
+    c = cevapla_kayit("x", "F001", {"sorgu": "planli_eslesen", "parametreler": [str(no)]})["cevap"]
+    assert "10.12.2026" in c and "118.500,00" in c
+
+
+def test_ayin_gunu_ve_tarih_yili(monkeypatch):
+    _aralik(monkeypatch)
+    import app.emirler as emirler
+    monkeypatch.setattr(emirler, "BUGUN", "2026-12-02")
+    assert emirler.tarih_cikar("15 ocak'ta 30 bin tl kira") == "2027-01-15"  # geçmişe (2026-01-15) yazılıyordu
+    assert emirler.tarih_cikar("ayın 28'inde elektrik faturası") == "2026-12-28"
+    db.planli_islem_ekle("F001", 1, "Gider", "2026-12-05", 42000, "Depo kirası", "Mert Gayrimenkul")
+    c = cevapla_kayit("x", "F001", {"sorgu": "gun_odemeleri", "parametreler": ["2026-12-05"]})["cevap"]
+    assert "Depo kirası" in c and "42.000,00" in c
+
+
+def test_satislar_ayi_ve_yatirdik(monkeypatch):  # 2. tur: "Kasım satışlarımız", "geçen ay sgk ye ne kadar yatırdık"
+    _aralik(monkeypatch)
+    n = kural_duzelt("kasım satışlarımız ne kadar?", {"niyet": "kayit", "sorgu": "yil_odenenler", "parametreler": ["2026"]})
+    assert n["sorgu"] == "faturalar" and n["parametreler"] == ["2026-11"]
+    n = kural_duzelt("geçen ay sgk ye ne kadar yatırdık", {"niyet": "belge", "sorgu": None, "parametreler": []})
+    assert n["sorgu"] == "odenenler" and n["parametreler"] == ["2026-11", "SGK primi"]
+    n = kural_duzelt("son gün tatile denk gelirse ne oluyor", {"niyet": "kapsam_disi", "sorgu": None, "parametreler": []})
+    assert n["niyet"] == "belge"
+
+
+def test_tatil_kurali_takvimden():  # SSS'teki SGK gecikme cezasını getiriyordu
+    c = takvim_cevabi("son gün tatile denk gelirse ne oluyor")
+    assert c and "ilk iş günü" in c and "vergi_takvimi" in c

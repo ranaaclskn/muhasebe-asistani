@@ -123,9 +123,15 @@ def takvim_kalibi(soru):
 
 def takvim_cevabi(soru):
     """Takvim sorusuysa ilgili paragraf(lar)ı AYNEN döndürür, değilse None."""
+    s = soru.replace("İ", "i").replace("I", "ı").lower()
+    # "Son gün tatile denk gelirse ne olur?" -> takvimdeki tatil kuralı (arama SSS'teki gecikme cezasını getiriyordu)
+    if re.search(r"tatil", s) and re.search(r"son gün|denk gel|rastla|vade|beyan|ödeme", s):
+        paragraflar = [p.strip() for p in (BELGE_DIR / TAKVIM).read_text(encoding="utf-8").split("\n\n")]
+        tatil = next((p for p in paragraflar if p.startswith("Son gün resmi tatil")), "")
+        if tatil:
+            return f"{' '.join(tatil.split())} [kaynak: {TAKVIM}]"
     if not takvim_kalibi(soru):
         return None
-    s = soru.replace("İ", "i").replace("I", "ı").lower()
     paragraflar = [p.strip() for p in (BELGE_DIR / TAKVIM).read_text(encoding="utf-8").split("\n\n")]
     basliklar = list(dict.fromkeys(b for k, b in _TAKVIM_TURLERI if k in s))
     if "muhtasar" in s or "muhsgk" in s:  # "muhtasar ve PRİM hizmet" ifadesindeki "prim" SGK sayılmasın

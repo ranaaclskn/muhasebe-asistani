@@ -28,7 +28,7 @@ from app.db import belge_bul, firma_talepleri, kayitli_eposta, planli_islem_ekle
 from app.emirler import (EKSIK_SORULARI, alan_cozumle, emir_cikar, evet_mi, iptal_mi,
                          emir_kalibi, talep_no_bul, talep_sorgu_kalibi)
 from app.bordro import bordro_kalibi
-from app.kayit import cevapla_kayit, donem_tr, planli_aciklama_cevabi, tarih_tr, tl
+from app.kayit import cevapla_kayit, donem_tr, planli_aciklama_cevabi, planli_eslesme, tarih_tr, tl
 from app.log import log_yaz
 from app.niyet import baska_firma_adi, niyet_belirle, yazim_duzelt
 
@@ -92,6 +92,12 @@ def niyet_dugumu(d: Durum):
     # ödemelerine gidiyordu). Emir cümleleri ("bordroyu gönder") emir kolunda kalır.
     if not emir_kalibi(d["soru"]) and bordro_kalibi(d["soru"], d["firma_id"]):
         return {"niyet": {"niyet": "kayit", "sorgu": "bordro", "parametreler": []}}
+    # Planlı kaydın karşı tarafı / konusu adıyla soru ("Anadolu Lojistik ne zaman ödeyecek?"): model ödeme
+    # geçmişine ya da belgeye gönderiyordu; kayıtları kod bulur
+    if not emir_kalibi(d["soru"]):
+        idler = planli_eslesme(d["soru"], d["firma_id"])
+        if idler:
+            return {"niyet": {"niyet": "kayit", "sorgu": "planli_eslesen", "parametreler": idler}}
     return {"niyet": niyet_belirle(d["soru"])}
 
 

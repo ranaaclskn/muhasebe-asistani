@@ -119,9 +119,9 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
         return firma_cevabi(satirlar[0])
     if sorgu == "durum" and len(satirlar) == 1:
         s = satirlar[0]
-        if s["durum"] == "Ödendi":
-            return (f"{donem_tr(s['donem'])} {s['tur']}: {tl(s['tutar_tl'])}, "
-                    f"{tarih_tr(s['odeme_tarihi'])} tarihinde ödendi.")
+        if s["durum"] == "Ödendi":  # son günü de yaz: "son ödeme günü neydi" sorusu da cevaplansın
+            return (f"{donem_tr(s['donem'])} {s['tur']}: {tl(s['tutar_tl'])}, son ödeme tarihi "
+                    f"{tarih_tr(s['son_odeme_tarihi'])}; {tarih_tr(s['odeme_tarihi'])} tarihinde ödendi.")
         return (f"{donem_tr(s['donem'])} {s['tur']}: {tl(s['tutar_tl'])}, durum: {s['durum']}, "
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
     if sorgu == "siradaki_tur":
@@ -134,6 +134,9 @@ def sablon_cevap(sorgu, satirlar, toplam, parametreler=None):
                 f"**{tarih_tr(s['son_odeme_tarihi'])}** tarihinde ödemelisiniz; tutar {tl(s['tutar_tl'])}.")
     if sorgu == "en_yakin":
         s = satirlar[0]
+        if "yon" in s:  # kullanıcının planlı ödemesi
+            return (f"En yakın ödemeniz: {s['aciklama']} ({tarih_tr(s['tarih'])}), {tl(s['tutar_tl'])} "
+                    "(sizin eklediğiniz planlı kayıt).")
         return (f"En yakın ödeme: {s['tur']} ({donem_tr(s['donem'])}), {tl(s['tutar_tl'])}, "
                 f"son ödeme tarihi {tarih_tr(s['son_odeme_tarihi'])}.")
     # Birden fazla kayıt: okunaklı olsun diye ALT ALTA liste (Markdown; Streamlit madde olarak çizer)
@@ -316,6 +319,99 @@ def gecikme_faizi_cevabi(firma_id, ay=None, tur=None):
     metin += f"\n\nKesin tutar için muhasebecinize danışın; isterseniz bir {GORUSME_TEKLIFI}."
     return {"cevap": metin, "kaynaklar": [s["id"] for s in satirlar] + ["6183 md.51 (oran: " + oran_tr + "/ay)"],
             "satirlar": satirlar, "yontem": "gecikme_faizi"}
+
+
+def _yaklasanlara_planli_ekle(firma_id, satirlar, sorgu, parametreler):
+    """Sıradaki ödemeler = ödenmemiş vergi/prim + kullanıcının planlı ödemeleri (tarihe göre). Ay başında vergi
+    tahakkuku olmaz; o zaman yasal son günler not olarak eklenir. Döner: (satırlar, not metni)."""
+    from app.takvim import sonraki_son_tarih
+    planli = [r for r in planli_islemler(firma_id) if r["yon"] == "Gider" and r["tarih"] >= BUGUN]
+    adet = 1 if sorgu == "en_yakin" else int(parametreler[0]) if parametreler and parametreler[0] else 5
+    hepsi = sorted(satirlar + planli, key=lambda r: (r.get("son_odeme_tarihi") or r["tarih"]))[:adet]
+    ek_not = ""
+    bu_ay_vergi = any((r.get("son_odeme_tarihi") or "")[:7] == BUGUN[:7] for r in satirlar)
+    if not bu_ay_vergi and sorgu == "yaklasanlar":
+        sonlar = [(t, *sonraki_son_tarih(t, BUGUN)) for t in AYLIK_TURLER]
+        ek_not = ("\n\n_Bu ayın vergi ve primleri henüz tahakkuk etmedi (beyannameler verilince oluşur). Yasal son "
+                  "günler: " + ", ".join(f"{t} {tarih_tr(s)}" for t, s, _ in sonlar)
+                  + ". Tahmini tutarlar için “bu ay ne kadar ödeyeceğim?” diye sorabilirsiniz._")
+    return hepsi, ek_not
+
+
+def son_tarih_cevabi(firma_id, tur, ay=None):
+    """'KDV'mi en geç ne zaman ödemeliyim' / 'Aralık SGK priminin son günü'. Ödenmemiş kayıt varsa o; yoksa
+    (ay başı) yasal son gün + tahmini tutar. Rakam ve tarih kodla."""
+    from app.takvim import sonraki_son_tarih
+    kayit = [s for s in calistir("siradaki_tur", firma_id, tur) if not ay or s["son_odeme_tarihi"][:7] == ay]
+    if kayit:  # ödenmemiş kayıt var: mevcut şablon ("**Ödenmedi.** ..." / "Henüz ödenmedi: ... en geç ...")
+        return {"cevap": sablon_cevap("siradaki_tur", kayit[:1], None), "kaynaklar": [kayit[0]["id"]],
+                "satirlar": kayit[:1], "yontem": "liste"}
+    # Ödenmemiş kayıt yok: önce son dönemin ödendiğini söyle ("geçici vergiyi ödedik mi" sorusu da buraya gelir),
+    # sonra sıradaki yasal son günü (ay başında tahakkuk henüz yok)
+    son = calistir("odeme_gecmisi", firma_id, tur)
+    metin = (f"Ödenmemiş {tur} kaydınız yok: son dönem ({donem_tr(son[0]['donem'])}) {tl(son[0]['tutar_tl'])}, "
+             f"{tarih_tr(son[0]['odeme_tarihi'])} tarihinde ödendi.\n\n") if son and not ay else ""
+    sonraki = sonraki_son_tarih(tur, BUGUN, ay)
+    if not sonraki:
+        metin += f"{donem_tr(ay)} ayında ödenecek {tur} yok." if ay else ""
+        return {"cevap": metin.strip() or f"Ödenmemiş {tur} kaydınız yok.", "kaynaklar": [s["id"] for s in son[:1]],
+                "satirlar": son[:1], "yontem": "son_tarih"}
+    tarih, donem = sonraki
+    donem_adi = "sıradaki dönem" if tur == "Geçici vergi" else f"{donem_tr(donem)} dönemi"
+    metin += (f"Sıradaki {tur} ({donem_adi}) için son ödeme günü **{tarih_tr(tarih)}** (yasal takvim; son gün "
+              "tatile denk gelirse ilk iş gününe kayar). Tutar beyanname verilince kesinleşir")
+    gecmis = calistir("donem_gecmisi", firma_id, tur) if tur in AYLIK_TURLER else []
+    if gecmis:
+        metin += f"; son {len(gecmis)} döneme göre tahmini **{tl(round(sum(g['tutar_tl'] for g in gecmis) / len(gecmis), 2))}**"
+    return {"cevap": metin + ".", "kaynaklar": [s["id"] for s in son[:1]] + ["vergi takvimi"], "satirlar": son[:1],
+            "yontem": "son_tarih"}
+
+
+def gun_odemeleri_cevabi(firma_id, tarih):
+    """'Ayın 5'inde ne ödeyeceğim?' -> o gün son tarihli vergi/prim + o güne planlı kayıtlar."""
+    vergi = [s for s in calistir("odenmemisler", firma_id) if s["son_odeme_tarihi"] == tarih]
+    planli = [r for r in planli_islemler(firma_id) if r["tarih"] == tarih]
+    if not vergi and not planli:
+        return {"cevap": f"{tarih_tr(tarih)} için kayıtlı bir ödemeniz ya da tahsilatınız yok.", "kaynaklar": [],
+                "satirlar": [], "yontem": "gun"}
+    satirlar = vergi + planli
+    metin = f"{tarih_tr(tarih)} tarihindeki kayıtlarınız:\n\n" + "\n".join(satir_metni(s) for s in satirlar)
+    return {"cevap": metin, "kaynaklar": [s["id"] if "yon" not in s else f"plan#{s['id']}" for s in satirlar],
+            "satirlar": satirlar, "yontem": "gun"}
+
+
+# Planlı kayıt açıklamalarında aranan konu kelimeleri (genel kelimeler -satış, ödeme, fatura- bilerek yok:
+# "kasımda kaç satış faturası kestik" planlı kayıt sorusu değildir)
+_PLANLI_KONU = ("kira", "kredi", "taksit", "tedarik", "elektrik", "doğalgaz", "sunucu", "lisans", "ikramiye",
+                "makine", "sigorta poliçe", "aidat")
+
+
+def planli_eslesme(soru, firma_id):
+    """'Anadolu Lojistik ne zaman ödeyecek?', 'Tedarikçiye ne zaman ödeme yapacağız?', 'Kredi taksitim ne kadar?'
+    -> soruda bir planlı kaydın karşı tarafı ya da konusu geçiyor ve zaman/tutar soruluyorsa o kayıtların id'leri.
+    Geçmiş zaman ('ödedi') ve emir cümleleri buraya girmez. Eşleşme yoksa []."""
+    s = soru.replace("İ", "i").replace("I", "ı").lower()
+    if not re.search(r"ne zaman|ne kadar|kaç|hangi gün|tarih", s) or re.search(r"ödedi|ödendi|ödemiş|kaydet|ekle", s):
+        return []
+    idler = []
+    for r in planli_islemler(firma_id):
+        if r["tarih"] < BUGUN:
+            continue
+        karsi = (r["karsi_taraf"] or "").replace("(kurgusal)", "").strip().lower()
+        ilk = next((w for w in re.findall(r"\w+", karsi) if len(w) >= 4 and w != "demo"), "")
+        aciklama = r["aciklama"].lower()
+        konu = any(k[:5] in s and k in aciklama for k in _PLANLI_KONU)
+        if (ilk and re.search(rf"\b{re.escape(ilk[:5])}", s)) or konu:
+            idler.append(str(r["id"]))
+    return idler
+
+
+def planli_eslesen_cevabi(firma_id, *idler):
+    """'Anadolu Lojistik ne zaman ödeyecek?' -> eşleşen planlı kayıtlar (eşleşmeyi niyet._planli_eslesme bulur)."""
+    secili = [r for r in planli_islemler(firma_id) if str(r["id"]) in idler]
+    metin = "Eklediğiniz planlı kayıtlarda:\n\n" + "\n".join(satir_metni(r) for r in secili)
+    return {"cevap": metin, "kaynaklar": [f"plan#{r['id']}" for r in secili], "satirlar": secili,
+            "yontem": "planli_eslesen"}
 
 
 def bugun_odersem_cevabi(firma_id, tur=None):
@@ -503,6 +599,12 @@ def _cevapla_kayit(soru, firma_id, niyet):
         return gecikme_orani_cevabi(firma_id)
     if sorgu == "gecikme_faizi":  # gecikmiş borç + tahmini gecikme zammı (oran config'ten)
         return gecikme_faizi_cevabi(firma_id, *parametreler)
+    if sorgu == "siradaki_tur":  # kayıt yoksa yasal son gün (ay başında tahakkuk olmaz)
+        return son_tarih_cevabi(firma_id, *parametreler)
+    if sorgu == "gun_odemeleri":  # "ayın 5'inde ne ödeyeceğim"
+        return gun_odemeleri_cevabi(firma_id, *parametreler)
+    if sorgu == "planli_eslesen":  # planlı kaydın karşı tarafı / konusu adıyla soruldu
+        return planli_eslesen_cevabi(firma_id, *parametreler)
     if sorgu == "bugun_odersem":  # ana borç + (gecikmişse) tahmini zam: Python hesaplar
         return bugun_odersem_cevabi(firma_id, *parametreler)
     if sorgu == "aylik_gider":  # vergi + maaş + planlı: Python birleştirir
@@ -512,6 +614,9 @@ def _cevapla_kayit(soru, firma_id, niyet):
         return bordro_cevabi(soru, firma_id) or {"cevap": CEKIMSER, "kaynaklar": [], "satirlar": [],
                                                   "yontem": "cekimser"}
     satirlar = calistir(sorgu, firma_id, *parametreler)
+    ek_not = ""
+    if sorgu in ("yaklasanlar", "en_yakin"):  # kullanıcının planlı ÖDEMELERİ de sıradaki ödemelerdir
+        satirlar, ek_not = _yaklasanlara_planli_ekle(firma_id, satirlar, sorgu, parametreler)
     # Bu ay ya da gelecek bir ayın ödemeleri sorulmuş ama henüz kayıt yok -> "bilgi yok" yerine TAHMİN.
     # (Ay başında, ör. 2 Aralık'ta, Kasım beyannameleri henüz verilmediği için bu ayın kaydı da olmaz.)
     if not satirlar and sorgu == "ay_odemeleri" and parametreler and parametreler[0] >= BUGUN[:7]:
@@ -539,11 +644,11 @@ def _cevapla_kayit(soru, firma_id, niyet):
     kaynaklar = [f"plan#{s['id']}" if "yon" in s else str(s["id"]) for s in satirlar]
     # Liste sorguları tek kayıtta da şablon: model tarihi/dönemi atıp bozuk cümle kuruyordu
     # ("Sigorta primi bu ayki ödememiz gereken...", "Geçen ay KDV ödediniz 44.307,46 TL.")
-    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "odenmemisler", "odenenler", "yil_odenenler",
+    if len(satirlar) > 1 or sorgu in ("ay_odemeleri", "siradaki_tur", "odenmemisler", "en_yakin", "odenenler", "yil_odenenler",
                                       "odeme_araligi", "gec_odenenler", "gecikmis", "yaklasanlar", "planli_odemeler", "beklenen_tahsilatlar", "nakit_plani"):
         # Liste cevaplarında model değer katmıyor (küçük model satırları tek cümleye sıkıştırıyor);
         # alt alta liste + Python toplamı hem daha okunaklı hem kesin doğru, hem de daha hızlı.
-        return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler), "kaynaklar": kaynaklar,
+        return {"cevap": sablon_cevap(sorgu, satirlar, toplam, parametreler) + ek_not, "kaynaklar": kaynaklar,
                 "satirlar": satirlar, "yontem": "liste"}
     mesajlar = [("system", SISTEM), ("human", f"VERİ:\n{veri}\n\nSORU: {soru}")]
     try:

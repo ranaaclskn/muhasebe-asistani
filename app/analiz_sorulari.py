@@ -14,9 +14,11 @@ import re
 
 SAYILAR = {"bir": 1, "iki": 2, "üç": 3, "dört": 4, "beş": 5, "altı": 6, "yedi": 7, "sekiz": 8, "dokuz": 9, "on": 10}
 _SAYI = r"(\d+|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on)"
-KOSUL = (r"\w+(?:ırsa|irse|ursa|ürse|arsa|erse)\w*|\w+(?:sam|sem|sak|sek)\b|\bolsa\b|\bsenaryo|"
+# "yüksek", "eşek" gibi -sek/-sak ile biten kelimeler koşul değildir ("en yüksek maaşlı çalışan" senaryo sanılıyordu)
+KOSUL = (r"\w+(?:ırsa|irse|ursa|ürse|arsa|erse)\w*|\b(?!yüksek\b|alçak\b|kısak\b)\w+(?:sam|sem|sak|sek)\b|\bolsa\b|\bsenaryo|"
          r"\bne olur\b|varsay")
-DEGISKEN = r"satış|ciro|gelir|hasılat|maliyet|alış|tedarik|hammadde|satıcı|personel|çalışan|eleman|işçi|kişi"
+# "gelir" kelime olarak ("denk gelirse" fiili senaryo değişkeni değil: "son gün tatile denk gelirse ne olur")
+DEGISKEN = r"satış|ciro|\bgelir(?!se)|hasılat|maliyet|alış|tedarik|hammadde|satıcı|personel|çalışan|eleman|işçi|kişi"
 ALACAK_KALIBI = (r"vadesi (?:geç|dol)\w* (?:\w+ )?(?:alacak|fatura|tahsilat)|(?:alacak|fatura)\w* vadesi (?:geç|dol)|"
                  r"tahsil edilme(?:miş|yen|di)|tahsil edeme|tahsil olma|açık (?:fatura|alacak)|ödenmemiş satış|"
                  r"(?:ödenmemiş|ödenmeyen|parası gelmeyen) fatura|parasını (?:almadı|alamadı)|ödemesini (?:almadı|alamadı)|"
@@ -48,6 +50,7 @@ def analiz_kalibi(soru):
         return {"niyet": "kayit", "sorgu": "senaryo", "parametreler": [], "duzeltme": "senaryo kalıbı"}
     # FİNANSAL SAĞLIK: puan / genel durum
     if re.search(r"(?:finansal|mali)\s+(?:sağl[ıi][kğ]|durum)|sağlık puan|puanım|puanı\b|skor|nasıl gidiyor|"
+                 r"\bmarj|k[aâ]r marj|k[aâ]rlılı|nakit dayanıklı|"
                  r"genel durum|şirketimin durumu|işletmemin durumu|firmamın durumu|"
                  r"(?:şirket|işletme|firma)\w*\s+(?:şu an\w*\s+)?(?:ne|nasıl)\s+durum", s):
         return {"niyet": "kayit", "sorgu": "saglik", "parametreler": [], "duzeltme": "finansal sağlık kalıbı"}

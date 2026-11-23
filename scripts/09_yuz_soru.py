@@ -737,9 +737,11 @@ def main():
     p = argparse.ArgumentParser(description="100 soruluk geniş değerlendirme")
     p.add_argument("--id", help="Virgülle ayrılmış soru kimlikleri (ör. S001,S050)")
     p.add_argument("--kategori", help="Yalnızca bu kategori (ör. Alacak)")
-    p.add_argument("--bugun", default="2026-11-23")
-    p.add_argument("--set", default="ana", choices=["ana", "kor", "kor2", "kor3", "kor4", "kor5"], help="ana: 110 soru; kor: düzeltmede bakılmamış yeni sorular")
+    p.add_argument("--bugun", default=None, help="varsayılan 2026-11-23 (sunum setinde 2026-12-02)")
+    p.add_argument("--set", default="ana", choices=["ana", "kor", "kor2", "kor3", "kor4", "kor5", "sunum"],
+                   help="ana: 110 soru; kor: düzeltmede bakılmamış yeni sorular; sunum: 200 soru, demo.db, 2 Aralık")
     a = p.parse_args()
+    a.bugun = a.bugun or ("2026-12-02" if a.set == "sunum" else "2026-11-23")
     os.environ["BUGUN"] = a.bugun
 
     import app.db as db
@@ -747,18 +749,27 @@ def main():
     from app.config import VERI_DIR
 
     gecici = Path(tempfile.mkdtemp(prefix="yuz_soru_"))
-    shutil.copy(VERI_DIR / "muhasebe.db", gecici / "muhasebe.db")
+    kaynak = VERI_DIR / ("demo.db" if a.set == "sunum" else "muhasebe.db")
+    if a.set == "sunum" and not kaynak.exists():
+        sys.exit("Önce sunum veritabanını kurun: python scripts/10_demo_hazirla.py")
+    shutil.copy(kaynak, gecici / "muhasebe.db")
     db.DB_YOLU, db._SEMA_GUNCEL = gecici / "muhasebe.db", False
     akis.asistan = akis.akis_kur(gecici / "checkpoint.sqlite")
-    con = db.baglan()  # şema güncel olsun; planlı kayıtlar bilinen iki kayıt
-    con.execute("DELETE FROM planli_islemler")
-    con.commit()
-    con.close()
-    db.planli_islem_ekle("F001", 1, "Gider", "2026-12-09", 50000, "Bilgisayar alımı", "Teknoloji Mağazası")
-    db.planli_islem_ekle("F001", 1, "Gelir", "2026-12-15", 30000, "Kent Market ek sipariş", "Kent Market Zinciri")
+    if a.set != "sunum":  # sunum setinde demo.db'nin kendi planlı kayıtları kullanılır
+        con = db.baglan()  # şema güncel olsun; planlı kayıtlar bilinen iki kayıt
+        con.execute("DELETE FROM planli_islemler")
+        con.commit()
+        con.close()
+        db.planli_islem_ekle("F001", 1, "Gider", "2026-12-09", 50000, "Bilgisayar alımı", "Teknoloji Mağazası")
+        db.planli_islem_ekle("F001", 1, "Gelir", "2026-12-15", 30000, "Kent Market ek sipariş", "Kent Market Zinciri")
 
     K = Kahin(gecici / "muhasebe.db", a.bugun)
-    liste = {"ana": sorular, "kor": sorular_kor, "kor2": sorular_kor2, "kor3": sorular_kor3, "kor4": sorular_kor4, "kor5": sorular_kor5}[a.set](K)
+    if a.set == "sunum":
+        sys.path.insert(0, str(KOK / "scripts"))
+        from sunum_soru_seti import sorular_sunum
+        liste = sorular_sunum(K, sys.modules[__name__])
+    else:
+        liste = {"ana": sorular, "kor": sorular_kor, "kor2": sorular_kor2, "kor3": sorular_kor3, "kor4": sorular_kor4, "kor5": sorular_kor5}[a.set](K)
     if a.id:
         sec = {x.strip().upper() for x in a.id.split(",")}
         liste = [x for x in liste if x[0] in sec]
@@ -798,7 +809,7 @@ def main():
         print(f"{kimlik} {'✓' if ok else '✗'} {kat:<12} {firma} {sure:5.1f} sn  {soru}"
               + ("" if ok else f"\n      -> {notu}\n      CEVAP: {cevap[:230].replace(chr(10), ' ')}"))
 
-    cikti = VERI_DIR / {"ana": "yuz_soru_sonuclar.csv", "kor": "kor_soru_sonuclar.csv", "kor2": "kor2_soru_sonuclar.csv", "kor3": "kor3_soru_sonuclar.csv", "kor4": "kor4_soru_sonuclar.csv", "kor5": "kor5_soru_sonuclar.csv"}[a.set]
+    cikti = VERI_DIR / {"ana": "yuz_soru_sonuclar.csv", "kor": "kor_soru_sonuclar.csv", "kor2": "kor2_soru_sonuclar.csv", "kor3": "kor3_soru_sonuclar.csv", "kor4": "kor4_soru_sonuclar.csv", "kor5": "kor5_soru_sonuclar.csv", "sunum": "sunum_soru_sonuclar.csv"}[a.set]
     with open(cikti, "w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(satirlar[0]))
         w.writeheader()

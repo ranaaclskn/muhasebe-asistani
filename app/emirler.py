@@ -85,18 +85,32 @@ def tutar_cikar(s):
 def tarih_cikar(s):
     """'05.12.2026' / '5 aralık' / '5 aralık 2026' -> '2026-12-05' ; geçersiz ya da yoksa None"""
     m = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(20\d{2})\b", s)
+    yil_yazili = True
     if m:
         g, a, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    elif re.search(r"\bayın (\d{1,2})", s):  # "ayın 28'inde" -> bu ayın 28'i (geçtiyse gelecek ayın)
+        g = int(re.search(r"\bayın (\d{1,2})", s).group(1))
+        y, a, yil_yazili = int(BUGUN[:4]), int(BUGUN[5:7]), False
+        if g < int(BUGUN[8:10]):
+            y, a = (y + 1, 1) if a == 12 else (y, a + 1)
     else:
         m = re.search(rf"\b(\d{{1,2}})\s+({'|'.join(AYLAR)})", s)
         if not m:
             return None
         yil = re.search(r"\b(20\d{2})\b", s)
         g, a, y = int(m.group(1)), AYLAR.index(m.group(2)) + 1, int(yil.group(1) if yil else BUGUN[:4])
+        yil_yazili = bool(yil)
     try:
-        return date(y, a, g).isoformat()  # 31 Şubat gibi geçersiz tarih -> None
+        sonuc = date(y, a, g)  # 31 Şubat gibi geçersiz tarih -> None
     except ValueError:
         return None
+    # Yılı yazılmamış ve bugünden önce kalan tarih ("15 Ocak", bugün Aralık) gelecek yıldır: planlı kayıt geçmişe yazılmasın
+    if not yil_yazili and sonuc.isoformat() < BUGUN:
+        try:
+            sonuc = sonuc.replace(year=sonuc.year + 1)
+        except ValueError:
+            return None
+    return sonuc.isoformat()
 
 
 def yon_cikar(s):
