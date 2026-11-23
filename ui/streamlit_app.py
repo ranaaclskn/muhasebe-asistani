@@ -17,10 +17,10 @@ from app.akis import devam, sor  # noqa: E402
 from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
 from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri, firmalar,  # noqa: E402
-                    kullanici_dogrula, planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar,
-                    yukumlulukler)
+                    erisilebilir_firma, kayitli_eposta, kullanici_dogrula, planli_islem_ekle, planli_islem_sil,
+                    planli_islemler, talep_karar, yukumlulukler)
 from app.kayit import AYLAR, donem_tr, tarih_tr, tl  # noqa: E402
-from app.onay import onay_ver, son_denetim, talep_gonder  # noqa: E402
+from app.onay import firma_dosyasi_ac, onay_ver, son_denetim, talep_gonder  # noqa: E402
 from app.analiz import (cari_ekstre, cari_ozet, gostergeler, senaryo, takvim_olaylari, uyarilar,  # noqa: E402
                         yaslandirma)
 from app.nakit import DURUMLAR, KODLAR, donem_aylari, hareketler, nakit_akis_tablosu  # noqa: E402
@@ -70,9 +70,13 @@ st.markdown("""
 
 /* Kartlar */
 .st-key-asistan_kart, .st-key-grafik_kart, .st-key-yaklasan_kart, .st-key-alt_kart, .st-key-giris_kart,
-.st-key-uyari_kart, .st-key-takvim_kart {
+.st-key-uyari_kart, .st-key-takvim_kart, .st-key-dosya_kart {
     background:#fff; border:1px solid var(--line); border-radius:8px; padding:18px 20px; }
-.st-key-asistan_kart { border-top:3px solid var(--brand); }
+.st-key-asistan_kart, .st-key-dosya_kart { border-top:3px solid var(--brand); }
+.st-key-dosya_bandi { background:#fff7df; border:1px solid #f0d58c; border-radius:8px; padding:8px 14px; }
+.st-key-dosya_bandi p { margin:0; color:#5c4a00; font-size:.9rem; }
+.kunye { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:.88rem; margin:6px 0 4px; }
+.kunye .s { color:var(--muted); } .kunye .d { color:var(--ink); font-weight:600; }
 .kart-bas { display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
             border-bottom:1px solid var(--line); padding-bottom:12px; }
 .kart-bas .baslik { font-size:1.05rem; font-weight:700; color:var(--ink); }
@@ -217,9 +221,21 @@ def giris_ekrani():
 
 
 # ---------- 2a) KULLANICININ KENDİ EKLEDİĞİ PLANLI ÖDEME / TAHSİLATLAR ----------
-def planli_bolumu(k, firma_id):
+def planli_bolumu(k, firma_id, salt_okunur=False):
     """Form -> db.planli_islem_ekle (doğrulama orada) -> planli_islemler tablosu.
-    Eklenen kayıtlar sohbetten sorulabilir ve gelir–gider grafiğine de yansır."""
+    Eklenen kayıtlar sohbetten sorulabilir ve gelir–gider grafiğine de yansır.
+    salt_okunur (muhasebeci görünümü): yalnızca liste; ekleme formu ve silme yok."""
+    if salt_okunur:
+        kayitlar = planli_islemler(firma_id)
+        st.caption("Firmanın eklediği planlı ödeme ve tahsilatlar · muhasebeci görünümünde değiştirilemez.")
+        if kayitlar:
+            st.dataframe(pd.DataFrame([{"No": r["id"], "Tür": YONLER[r["yon"]], "Tarih": tarih_tr(r["tarih"]),
+                                        "Tutar": tl(r["tutar_tl"]), "Açıklama": r["aciklama"],
+                                        "Karşı taraf": r["karsi_taraf"] or ""} for r in kayitlar]),
+                         hide_index=True, width="stretch")
+        else:
+            st.caption("Firma henüz planlı kayıt eklememiş.")
+        return
     mesaj = st.session_state.pop("planli_mesaj", None)
     if mesaj:
         getattr(st, mesaj[0])(mesaj[1])
@@ -590,13 +606,82 @@ def rapor_bolumu(firma_id):
 Uyarılar, sağlık puanı ve ödemeler rapor tarihindeki ({tarih_tr(BUGUN)}) güncel durumu gösterir.""")
 
 
-def firma_paneli(k):
-    firma_id = k["firma_id"]  # Kural 2: firma_id OTURUMDAN; kullanıcı değiştiremez
+# ---------- 2g) MUHASEBECİ GÖRÜNÜMÜ: müşteri firmanın dosyasını aç (salt okunur) ----------
+FIRMAYA_OZEL_ANAHTARLAR = ("cari_secim", "hareket_ay", "hareket_kod", "hareket_ara")  # seçenekleri firmaya göre
+
+
+def dosya_ac(k, firma_id):
+    """Yetki + denetim kaydı app/onay.firma_dosyasi_ac'ta; burada yalnızca oturum durumu."""
+    try:
+        firma_dosyasi_ac(k, firma_id)
+    except PermissionError as e:
+        st.session_state.onay_mesaji = ("error", str(e))
+        return
+    for a in FIRMAYA_OZEL_ANAHTARLAR:  # önceki firmanın filtreleri yeni firmaya taşınmasın
+        st.session_state.pop(a, None)
+    st.session_state.acik_firma = firma_id
+
+
+def portfoye_don():
+    st.session_state.pop("acik_firma", None)
+    for a in FIRMAYA_OZEL_ANAHTARLAR:
+        st.session_state.pop(a, None)
+
+
+def muhasebeci_bandi(unvan):
+    with st.container(key="dosya_bandi"):
+        c1, c2 = st.columns([5, 1], vertical_alignment="center")
+        c1.markdown(f":material/visibility: **Muhasebeci görünümü · salt okunur** — {escape(unvan)} panelini "
+                    "firmanın gördüğü gibi görüyorsunuz. Asistan ve kayıt ekleme bu görünümde kapalıdır; "
+                    "dosyanın açılışı denetim kaydına yazıldı.")
+        c2.button("Portföye dön", icon=":material/arrow_back:", key="portfoye_don", on_click=portfoye_don,
+                  width="stretch")
+
+
+def firma_dosyasi_bolumu(firma_id, firma):
+    """Muhasebeci görünümünde asistanın yerine: künye, iletişim, sağlık puanı, talepler, rapor."""
+    with st.container(key="dosya_kart"):
+        talepler = firma_talepleri(firma_id)
+        bekleyen = sum(1 for t in talepler if t["durum"] == "Onay bekliyor")
+        kart_basligi("Firma dosyası", "Künye, iletişim, finansal durum ve talepler",
+                     f"{bekleyen} talep onay bekliyor" if bekleyen else "Salt okunur", "kirmizi" if bekleyen else "")
+        satir = [("Unvan", firma.get("unvan")), ("Tür", firma.get("tur")), ("Sektör", firma.get("sektor")),
+                 ("Vergi No", firma.get("vergi_no")), ("Çalışan", firma.get("calisan_sayisi")),
+                 ("Kayıtlı e-posta", kayitli_eposta(firma_id))]
+        html('<div class="kunye">' + "".join(f'<span class="s">{a}</span><span class="d">{escape(str(d))}</span>'
+                                             for a, d in satir if d) + "</div>")
+        g = gostergeler(firma_id)
+        c1, c2 = st.columns(2)
+        kpi(c1, "Finansal sağlık", f"{g['puan']} / 100", g["etiket"],
+            "iyi" if g["puan"] >= 60 else "kotu" if g["puan"] < 40 else "")
+        kpi(c2, "Nakit dayanıklılığı", f"{g['karsilama_ay']:.1f} ay".replace(".", ","),
+            f"Birikmiş {kisa_tl(g['birikmis'])}")
+        html('<div class="bolum-etiket">Talepler</div>')
+        if talepler:
+            st.dataframe(pd.DataFrame(talepler).rename(columns={
+                "id": "No", "talep": "Talep", "durum": "Durum", "olusturma_tarihi": "Oluşturma"}),
+                hide_index=True, width="stretch", height=260)
+        else:
+            st.caption("Firmanın talebi yok.")
+        rapor_dugmesi(firma_id, varsayilan_ay(), "dosya_rapor", f"{donem_tr(varsayilan_ay())} raporu (PDF)")
+
+
+def firma_paneli(k, goruntulenen=None):
+    """Firma yetkilisi: kendi paneli. Muhasebeci (goruntulenen verilirse): o firmanın paneli, salt okunur.
+    Kural 2: firma yetkilisinde firma_id OTURUMDAN gelir; muhasebecide yetki ana akışta erisilebilir_firma ile
+    denetlenir."""
+    salt_okunur = goruntulenen is not None and k["rol"] == "muhasebeci"
+    firma_id = goruntulenen if salt_okunur else k["firma_id"]
     firma = firma_bilgisi(firma_id)
+    g = {**k, "firma_id": firma_id, "unvan": firma.get("unvan", firma_id)}  # görüntülenen firma
+    if salt_okunur:
+        muhasebeci_bandi(g["unvan"])
+        st.write("")
     meta = " · ".join(x for x in [firma.get("tur"), firma.get("sektor"),
                                   f"Vergi No {firma['vergi_no']}" if firma.get("vergi_no") else ""] if x)
-    html(f'<div class="ust-bar"><div><div class="ust-etiket">Genel bakış</div>'
-         f'<div class="unvan">{escape(k["unvan"])}</div><div class="meta">{escape(meta)}</div></div>'
+    etiket = "Müşteri dosyası · salt okunur" if salt_okunur else "Genel bakış"
+    html(f'<div class="ust-bar"><div><div class="ust-etiket">{etiket}</div>'
+         f'<div class="unvan">{escape(g["unvan"])}</div><div class="meta">{escape(meta)}</div></div>'
          f'<div class="sag"><b>{bugun_tr()}</b><br>{escape(k["ad"])}</div></div>')
 
     satirlar = yukumlulukler(firma_id)
@@ -609,7 +694,10 @@ def firma_paneli(k):
 
     sol, sag = st.columns([1.2, 1], gap="medium")
     with sol:  # asistan sayfa açılır açılmaz görünür (yüksekliği ekrana göre CSS ile ayarlanır)
-        asistan_bolumu(k, firma_id)
+        if salt_okunur:  # muhasebeci firma adına soru sormaz / talep oluşturmaz
+            firma_dosyasi_bolumu(firma_id, firma)
+        else:
+            asistan_bolumu(k, firma_id)
     with sag:
         with st.container(key="uyari_kart"):
             liste_u = uyarilar(firma_id)
@@ -647,9 +735,9 @@ def firma_paneli(k):
             ":material/receipt_long: Yükümlülükler", ":material/event: Planlı kayıtlar",
             ":material/outgoing_mail: Talepler"])
         with t0:
-            nakit_bolumu(k, liste)
+            nakit_bolumu(g, liste)
         with th:
-            hareket_bolumu(k, liste)
+            hareket_bolumu(g, liste)
         with tk:
             takvim_bolumu([firma_id], "firma_takvim")
         with tc:
@@ -672,7 +760,7 @@ def firma_paneli(k):
                          hide_index=True, width="stretch", height=380)
             csv_indir(df_y, "yukumlulukler.csv")
         with t2:
-            planli_bolumu(k, firma_id)
+            planli_bolumu(k, firma_id, salt_okunur)
         with t3:
             talepler = firma_talepleri(firma_id)
             if talepler:
@@ -733,7 +821,7 @@ def kuyruk_bolumu():
             st.rerun()
 
 
-def firma_portfoyu(talepler):
+def firma_portfoyu(talepler, k):
     """Muhasebecinin tüm müşteri firmaları tek tabloda (rakamlar SQL'den; firma panelindekilerle aynı fonksiyonlar)."""
     bugun = date.fromisoformat(BUGUN)
     satirlar = []
@@ -771,11 +859,14 @@ def firma_portfoyu(talepler):
         st.caption("Net (son 3 ay): gelir − gider (satış/alış faturaları, net maaş, vergi/prim, planlı kayıtlar). "
                    "Durum: gecikmiş ödeme varsa kırmızı, 7 gün içinde son tarih varsa sarı.")
         fids = firmalar()
-        c1, c2, c3 = st.columns([1.6, 1, 1], vertical_alignment="bottom")
-        fid = c1.selectbox("Aylık yönetici raporu", fids, key="muh_rapor_firma",
+        c1, c2, c3, c4 = st.columns([1.6, 1, 1, 1], vertical_alignment="bottom")
+        fid = c1.selectbox("Firma", fids, key="muh_rapor_firma",
                            format_func=lambda f: firma_bilgisi(f).get("unvan", f))
-        ay = c2.selectbox("Rapor ayı", secilebilir_aylar(), format_func=donem_tr, key="muh_rapor_ayi")
-        with c3:
+        c2.button("Paneli aç", icon=":material/folder_open:", key="firma_ac", type="primary", width="stretch",
+                  on_click=lambda: dosya_ac(k, st.session_state.muh_rapor_firma),  # tıklama anındaki seçim
+                  help="Firmanın panelini salt okunur açar (denetime kaydedilir)")
+        ay = c3.selectbox("Rapor ayı", secilebilir_aylar(), format_func=donem_tr, key="muh_rapor_ayi")
+        with c4:
             rapor_dugmesi(fid, ay, "muh_rapor_indir", "PDF indir")
 
 
@@ -797,7 +888,7 @@ def muhasebeci_paneli(k):
     mesaj = st.session_state.pop("onay_mesaji", None)  # st.rerun sonrası sonucu göster
     if mesaj:
         getattr(st, mesaj[0])(mesaj[1])
-    firma_portfoyu(talepler)
+    firma_portfoyu(talepler, k)
     st.write("")
     with st.container(key="takvim_kart"):
         kart_basligi("Vergi takvimi ve yaşlandırma", "Tüm firmaların son ödeme günleri ve ödenmemiş borçları")
@@ -868,6 +959,12 @@ def yan_menu(k):
                 for a, d in satir if d))
             html('<div class="yan-bolum">Rapor</div>')
             rapor_dugmesi(k["firma_id"], varsayilan_ay(), "yan_rapor", f"{donem_tr(varsayilan_ay())} raporu (PDF)")
+        elif st.session_state.get("acik_firma"):
+            html('<div class="yan-bolum">Açık dosya</div>'
+                 f'<div class="yan-satir"><span class="d" style="text-align:left">'
+                 f'{escape(firma_bilgisi(st.session_state.acik_firma).get("unvan", ""))}</span></div>')
+            st.button("Portföye dön", icon=":material/arrow_back:", key="yan_portfoy", on_click=portfoye_don,
+                      width="stretch")
         html('<div class="yan-bolum">Oturum</div>')
         if st.button("Çıkış yap", icon=":material/logout:", width="stretch"):
             st.session_state.clear()
@@ -881,6 +978,11 @@ else:
     k = st.session_state.kullanici
     yan_menu(k)
     if k["rol"] == "muhasebeci":
-        muhasebeci_paneli(k)
+        acik = st.session_state.get("acik_firma")
+        if acik and erisilebilir_firma(k, acik):  # her çizimde yeniden denetlenir
+            firma_paneli(k, goruntulenen=acik)
+        else:
+            st.session_state.pop("acik_firma", None)
+            muhasebeci_paneli(k)
     else:
         firma_paneli(k)

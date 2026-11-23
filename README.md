@@ -48,7 +48,7 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
   - **Aylık rapor (PDF):** seçilen tamamlanmış ay için iki sayfalık yönetici raporu: ayın tahsilat/ödeme/neti (önceki aya göre değişim), dikkat edilmesi gerekenler, son 6 ay gelir–gider grafiği, ayın kalem dağılımı, en büyük 5 müşteri ve satıcı, 6 aylık nakit akış tablosu, finansal sağlık puanı ve bileşenleri, geciken ve 30 gün içinde ödenecekler. Rakamlar paneldeki fonksiyonlardan gelir (`app/rapor.py`, testle karşılaştırılır); model rakam üretmez. Geçen ayın raporu yan menüden tek tıkla da indirilir.
   - **Diğer sekmeler:** yükümlülükler (üstte ödenmemiş borçların **yaşlandırması**: vadesi gelmemiş / 1–30 / 31–60 / 60+ gün gecikmiş; tablo durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
   - Nakit akış tablosu ve gelir–gider grafiği aynı kaynakları kullanır; ay ay netleri birebir aynıdır (testle kontrol edilir).
-- **Muhasebeci paneli:** **tüm firmaların vergi takvimi** (ay takviminde firma adıyla) ve **yaşlandırma tablosu** (firma × gecikme kovası), **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti; altında herhangi bir firmanın **aylık PDF raporu**), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
+- **Muhasebeci paneli:** **tüm firmaların vergi takvimi** (ay takviminde firma adıyla) ve **yaşlandırma tablosu** (firma × gecikme kovası), **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti; altında firma seçilip **Paneli aç** ile firmanın paneline **salt okunur** girilir ya da **aylık PDF raporu** indirilir), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
 
 Kullanıcının eklediği kayıtlar muhasebecinin resmî kayıtlarından (`yukumlulukler`) **ayrı** tutulur; "bu ay ne kadar vergi ödeyeceğim" sorusu yalnız resmî kayıtlardan cevaplanır.
 
@@ -113,6 +113,7 @@ HATIRLATMA (scripts/05_hatirlatma.py → n8n)
 **Tasarım ilkesi: "LLM yorumlar, kod denetler."** Küçük model esnek Türkçeyi anlamakta iyidir ama kesin kurallarda hata yapabilir. Bu yüzden:
 - Model çıktısı şemaya göre doğrulanır, parametreler türlerine göre yerine oturtulur.
 - Kesin kalıplar ("bu ay ödenecek", "son 3 ay", "gecikmiş", "kaç çalışan") kod kurallarıyla düzeltilir.
+- **Muhasebeci görünümü salt okunurdur:** muhasebeci portföyden bir firmanın panelini açabilir; yetki her çizimde koddan denetlenir (`db.erisilebilir_firma`: firma yetkilisi yalnızca kendi firmasını, muhasebeci kayıtlı firmaları görür), asistan ve kayıt ekleme/silme bu görünümde kapalıdır ve her açılış denetim kaydına yazılır (`onay.firma_dosyasi_ac`).
 - Analiz soruları (sağlık puanı, cari, senaryo, uyarılar) modele gitmeden **kodla** tanınır ve cevaplanır (`app/analiz_sorulari.py`); rakamlar paneldeki sekmelerle aynı fonksiyonlardan gelir. "2 kişi işe alırsam" gibi koşullu cümleler senaryodur, geçmiş işe alım (bordro) sorusu değildir.
 - Kayıt cevaplarında uydurma sayı, eksik ana rakam ya da "ödendi/ödenmedi" çelişkisi varsa model cevabı atılır ve şablon cevap kullanılır.
 - Belge cevaplarında cevaptaki her tutar ve tarih kaynak belgede **birebir** geçmek zorundadır (kanıt eşleştirme). Kaynak, bu kanıtı içeren dosya olarak belirlenir.
@@ -259,7 +260,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 218 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 234 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, analizler, aylık PDF raporu, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -281,7 +282,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 218/218 |
+| Birim testleri (`pytest`) | 234/234 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -384,7 +385,8 @@ muhasebe-asistani/
 - [x] Uyarılar, ödeme takvimi, cari hesaplar, yaşlandırma, finansal sağlık puanı, senaryo simülatörü
 - [x] Asistan analizlere bağlandı: sağlık puanı, cari, senaryo ve uyarı soruları sohbetten cevaplanır
 - [x] Aylık yönetici raporu (PDF): firma panelinden, muhasebeci portföyünden ve komut satırından
-- [x] pytest birim testleri (218 test)
+- [x] Muhasebecinin firmaya girmesi: portföyden firmanın paneli salt okunur açılır, açılış denetime yazılır
+- [x] pytest birim testleri (234 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)

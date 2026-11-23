@@ -496,6 +496,18 @@ def firmalar():
         con.close()
 
 
+def erisilebilir_firma(kullanici, firma_id):
+    """Oturumdaki kullanıcı bu firmanın panelini görebilir mi? (Arayüzden gelen firma_id'ye güvenilmez.)
+    Firma yetkilisi: yalnızca kendi firması. Muhasebeci: kayıtlı her müşteri firma (salt okunur görüntüleme)."""
+    try:
+        _firma_kontrol(firma_id)
+    except ValueError:
+        return False
+    if (kullanici or {}).get("rol") == "muhasebeci":
+        return firma_id in firmalar()
+    return (kullanici or {}).get("firma_id") == firma_id
+
+
 def firma_bilgisi(firma_id):
     """Panel başlığı ve yan menü için firma künyesi (unvan, tür, vergi no, sektör, çalışan sayısı)."""
     _firma_kontrol(firma_id)

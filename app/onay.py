@@ -15,7 +15,7 @@ import json
 import secrets
 from datetime import datetime
 
-from app.db import baglan
+from app.db import baglan, erisilebilir_firma, firma_bilgisi
 
 SEMA = """
 CREATE TABLE IF NOT EXISTS onay_tokenlari (
@@ -137,6 +137,19 @@ def talep_gonder(talep_id, onay_token, firma_id=None):
         return {"ok": False, "hata": hata}
     denetim_yaz(talep_id, "gonderildi", json.dumps({"dosya": gonderim["dosya"]}, ensure_ascii=False))
     return {"ok": True, "tekrar": False, "gonderim": gonderim}
+
+
+def firma_dosyasi_ac(kullanici, firma_id):
+    """Muhasebeci bir müşteri firmanın panelini (salt okunur) açar: yetki kontrolü + denetim kaydı.
+    Gerçek muhasebe yazılımlarındaki "müşteri dosyasını aç" akışı; kim, hangi firmaya, ne zaman baktı kayıtlıdır.
+    Yetkisizse PermissionError (firma yetkilisi başka firmayı açamaz)."""
+    if (kullanici or {}).get("rol") != "muhasebeci" or not erisilebilir_firma(kullanici, firma_id):
+        raise PermissionError("Bu firmanın dosyasını açma yetkiniz yok.")
+    bilgi = firma_bilgisi(firma_id)
+    denetim_yaz(None, "firma_dosyasi_acildi",
+                f"{kullanici.get('ad', '')} (kullanıcı #{kullanici.get('id')}) {firma_id} · "
+                f"{bilgi.get('unvan', '')} panelini salt okunur açtı")
+    return bilgi
 
 
 def son_denetim(limit=20):
