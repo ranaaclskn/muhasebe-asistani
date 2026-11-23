@@ -34,8 +34,11 @@ Firma sahiplerinin muhasebecilerine sormadan kendi **vergi ve prim ödemelerini,
   - **Özet kartları:** bu ay ödenecek, geciken ödeme, en yakın son tarih, seçilen dönemin net durumu (artı/eksi).
   - **Gelir–gider grafiği:** gelir sıfırın üstünde, gider altında, koyu çizgi ayın neti. Dönem seçimi (son 3 ay / son 6 ay / tümü), toplam gelir–gider–net özeti, **gider dağılımı** (vergi/prim, maaş, alış faturaları) ve tablo görünümü (CSV indirilebilir). Gelir = satış faturaları + planlı tahsilatlar; gider = alış faturaları + **net** maaşlar + vergi/prim + planlı ödemeler (maaşta net kullanılır, çünkü SGK ve muhtasar kesintileri zaten vergi/prim olarak sayılır). İleri tarihli aylar açık renkle "plan" olarak gösterilir.
   - **Yaklaşan ödemeler:** ödenmemiş vergi/prim ve planlı ödemeler tarih sırasıyla; "4 gün gecikti" (kırmızı), "5 gün kaldı" (7 gün kalınca sarı).
-  - **Alt sekmeler:** yükümlülükler (durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
-- **Muhasebeci paneli:** bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
+  - **Nakit akış tablosu** (hocanın Excel "N.AKIŞI" sayfası örnek alındı): satırlar **kodlu kalemler** (10 müşteri tahsilatları — her müşteri ayrı satır, 19 planlı tahsilat; 37 personel maaşları, 38 SGK, 52 muhtasar, 53 KDV, 54 geçici vergi, 58 satıcılar — her satıcı ayrı satır, 70 planlı ödeme), sütunlar **aylar**. Önceki dönemden devir, TOPLAM TAHSİLAT, TOPLAM ÖDEME, NET NAKİT AKIŞI ve kümülatif satırları; ödemeler eksi ve kırmızı, ileri tarihli aylar "Plan". Dönem (son 3 / 6 ay / tümü) ve müşteri/satıcı kırılımı seçilebilir. **Excel olarak indir:** biçimlendirilmiş `.xlsx` (Nakit Akış, filtreli ve `SUBTOTAL` toplamlı Hareket, Kodlar sayfaları).
+  - **Hareket dökümü** (Excel "HAREKET" sayfası karşılığı): faturalar, maaş ödemeleri, vergi/prim ve planlı kayıtlar tek listede — tarih, vade, giriş/çıkış, kod, kalem, işlem, karşı taraf, tutar, durum (Gerçekleşti / Bekliyor / Gecikti / Plan). Ay, yön, kalem ve metin araması ile filtrelenir; seçime göre giriş, çıkış ve net toplamı.
+  - **Diğer sekmeler:** yükümlülükler (durum renkli, CSV), planlı ödeme / tahsilat ekleme formu ve listesi (CSV), taleplerim. Sekmeler sabit yüksekliktedir; sekme değişince sayfa kaymaz.
+  - Nakit akış tablosu ve gelir–gider grafiği aynı kaynakları kullanır; ay ay netleri birebir aynıdır (testle kontrol edilir).
+- **Muhasebeci paneli:** **firma portföyü** (tüm müşteri firmalar tek tabloda: bu ay ödenecek, geciken, en yakın son tarih, son 3 ayın neti, bekleyen talep ve durum rozeti), bekleyen talep ve e-posta kuyruğu sayısı, onay bekleyen talepler (ne onaylandığının özetiyle), **Onayla / Reddet**; onay tek kullanımlık token ile gönderime alınır ve e-postası n8n ile hemen gönderilir. **E-posta kuyruğu** bölümü n8n'in açık/kapalı olduğunu ve henüz gitmemiş e-postaları gösterir. Her adım denetim kaydına yazılır.
 
 Kullanıcının eklediği kayıtlar muhasebecinin resmî kayıtlarından (`yukumlulukler`) **ayrı** tutulur; "bu ay ne kadar vergi ödeyeceğim" sorusu yalnız resmî kayıtlardan cevaplanır.
 
@@ -79,7 +82,7 @@ HATIRLATMA (scripts/05_hatirlatma.py → n8n)
 | Vektör DB | ChromaDB (`data/chroma`, koleksiyon `muhasebe`) |
 | LLM kütüphaneleri | `langchain-ollama`, `langchain-chroma`, `langchain-text-splitters`, `langchain-core` |
 | Agent | LangGraph (`StateGraph`) |
-| Arayüz | Streamlit (grafik: Altair) |
+| Arayüz | Streamlit (grafik: Altair; Excel raporu: openpyxl) |
 | Parola | bcrypt |
 | Otomasyon | n8n 2.x (onay e-postası ve ödeme hatırlatması; webhook → Send Email) |
 
@@ -227,7 +230,7 @@ Senaryo günü **11 Kasım 2026**'dır: testler bu günde çalışır; arayüz i
 **Birim testleri (model gerekmez, birkaç saniye):**
 
 ```bash
-python -m pytest -q            # 138 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, planlı kayıtlar, sohbet akışı
+python -m pytest -q            # 149 test: niyet kuralları, kayıt cevapları, onay/token, e-posta köprüsü, nakit akış tablosu, planlı kayıtlar, sohbet akışı
 ```
 
 Testler gerçek veritabanının **geçici bir kopyasında** çalışır; arayüzden eklediğiniz kayıtlar değişmez ve testleri etkilemez.
@@ -249,7 +252,7 @@ python scripts/soru_dene.py   # etkileşimli: her sorunun hangi yoldan geçtiği
 |---|---|
 | Niyet sınıflandırma (test seti T01–T15) | 15/15 |
 | Kayıt cevapları (T01–T05, T12, T13 + kullanıcı testlerinden 8 ek soru) | 15/15 |
-| Birim testleri (`pytest`) | 138/138 |
+| Birim testleri (`pytest`) | 149/149 |
 | Belge cevapları (T06–T09, T15 + var olmayan dönem) | 6/6 |
 | Firma izolasyonu (3 hesap, arayüz) | Her firma yalnızca kendi verisini görüyor |
 
@@ -270,6 +273,7 @@ muhasebe-asistani/
 │   ├── emirler.py       # emir menüsü (belge gönder, planlı kayıt, görüşme) ve alan çıkarımı
 │   ├── onay.py          # insan onayı, tek kullanımlık token, denetim kaydı
 │   ├── bildirim.py      # n8n köprüsü: onay e-postası (kuyruk, tekrar deneme), ödeme hatırlatması
+│   ├── nakit.py         # hareket dökümü ve nakit akış tablosu (kod planı, kod × ay matrisi, devir, kümülatif)
 │   ├── rag.py           # Chroma arama → rerank → JSON cevap → kanıt eşleştirme
 │   ├── dogrulama.py     # lexical rerank, dönem çıkarımı, kanıt/atıf doğrulama
 │   ├── akis.py          # LangGraph: niyet → {sql, rag, talep, reddet} → logla
@@ -288,7 +292,8 @@ muhasebe-asistani/
 │   └── tool_calling_dene.py                   # tool calling denemesi
 ├── ui/
 │   ├── streamlit_app.py # giriş, firma paneli (asistan, kartlar, yaklaşan ödemeler, sekmeler), muhasebeci paneli
-│   └── grafik.py        # gelir–gider grafiği (Altair), aylık özet ve gider dağılımı
+│   ├── grafik.py        # gelir–gider grafiği (Altair), aylık özet ve gider dağılımı
+│   └── tablolar.py      # Excel benzeri nakit akış tablosu (HTML), .xlsx raporu, muhasebeci firma portföyü
 ├── tests/               # pytest testleri (veritabanının geçici kopyasında, model gerekmez)
 ├── .streamlit/config.toml  # tema ve yalnızca 127.0.0.1'de çalışma ayarı
 ├── n8n/                 # akislar.json, test_posta_kimligi.json, kur.sh, baslat.sh, AI Agent sistem mesajı
@@ -339,7 +344,8 @@ muhasebe-asistani/
 - [x] Streamlit arayüzü (giriş, firma paneli, muhasebeci onayı)
 - [x] Kurumsal arayüz: gelir–gider grafiği, yaklaşan ödemeler, gider dağılımı, CSV indirme
 - [x] Tahmini gecikme zammı ve gecikme zammı oranı cevabı
-- [x] pytest birim testleri (138 test)
+- [x] Nakit akış tablosu ve hareket dökümü (Excel indirme), muhasebeci firma portföyü
+- [x] pytest birim testleri (149 test)
 - [x] n8n: onaylanan talep için e-posta (belge ekli), yaklaşan/geciken ödemeler için hatırlatma
 - [ ] Hatırlatmanın her gün otomatik çalışması (n8n Schedule Trigger ya da cron)
 - [ ] Toplu test scripti (Hit@3, Top1, ortalama süre)

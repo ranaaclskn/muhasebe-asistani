@@ -16,12 +16,14 @@ import streamlit as st  # noqa: E402
 from app.akis import devam, sor  # noqa: E402
 from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
-from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri,  # noqa: E402
+from app.db import (YONLER, bekleyen_talepler, firma_bilgisi, firma_talepleri, firmalar,  # noqa: E402
                     kullanici_dogrula, planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar,
                     yukumlulukler)
 from app.kayit import AYLAR, donem_tr, tarih_tr, tl  # noqa: E402
 from app.onay import onay_ver, son_denetim, talep_gonder  # noqa: E402
+from app.nakit import DURUMLAR, KODLAR, donem_aylari, hareketler, nakit_akis_tablosu  # noqa: E402
 from ui.grafik import PENCERELER, aylik_tablo, gider_dagilimi, grafik, kisa_tl  # noqa: E402
+from ui.tablolar import ay_etiketi, excel_raporu, hareket_tablosu, nakit_html, portfoy_html  # noqa: E402
 
 st.set_page_config(page_title="Muhasebe Asistanı", page_icon=":material/account_balance:", layout="wide",
                    initial_sidebar_state="expanded")
@@ -82,7 +84,7 @@ st.markdown("""
 [data-testid="stLayoutWrapper"]:has(> .st-key-sohbet_kutu) {
     flex:0 0 max(260px, calc(100vh - 365px)) !important; height:max(260px, calc(100vh - 365px)) !important; }
 /* Sekme değişince sayfa kaymasın: sekme içerikleri sabit yükseklikte, taşan kısım kendi içinde kayar */
-.st-key-alt_kart [role="tabpanel"] { height:500px; overflow-y:auto; overflow-x:hidden; }
+.st-key-alt_kart [role="tabpanel"] { height:640px; overflow-y:auto; overflow-x:hidden; }
 .st-key-grafik_kart [role="tabpanel"] { height:150px; overflow-y:auto; overflow-x:hidden; }
 .st-key-sohbet_kutu [data-testid="stChatMessage"] { background:#fff; border:1px solid var(--line); border-radius:6px;
                                                     padding:10px 14px; }
@@ -409,6 +411,72 @@ def yaklasan_bolumu(firma_id, satirlar):
             st.caption(f"+{len(kalemler) - 6} kalem daha · tamamı Yükümlülükler sekmesinde")
 
 
+# ---------- 2e) NAKİT AKIŞ TABLOSU ve HAREKET DÖKÜMÜ (hocanın Excel'i: N.AKIŞI ve HAREKET sayfaları) ----------
+NAKIT_PENCERE = {"Son 3 ay": 3, "Son 6 ay": 6, "Tümü": None}
+
+
+def nakit_bolumu(k, liste):
+    c1, c2, c3 = st.columns([1.6, 1, 1], vertical_alignment="center")
+    secim = c1.segmented_control("Nakit dönemi", list(NAKIT_PENCERE), default="Son 6 ay", key="nakit_pencere",
+                                 required=True, label_visibility="collapsed")
+    kirilim = c2.toggle("Müşteri / satıcı kırılımı", value=True, key="nakit_kirilim")
+    aylar = donem_aylari(liste, NAKIT_PENCERE[secim or "Son 6 ay"])
+    if not aylar:
+        st.caption("Henüz hareket yok.")
+        return
+    satirlar = nakit_akis_tablosu(liste, aylar)
+    with c3:
+        st.download_button("Excel olarak indir", excel_raporu(k["unvan"], satirlar, aylar, liste),
+                           file_name=f"nakit_akis_{k['firma_id']}_{BUGUN}.xlsx", icon=":material/table_view:",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           width="stretch")
+    html(nakit_html(satirlar, aylar, kirilim))
+    st.caption(f"TL, kuruşlar yuvarlanmıştır · Ödemeler eksi (kırmızı) · {ay_etiketi(aylar[0])} – "
+               f"{ay_etiketi(aylar[-1])} · “Plan” sütunları bekleyen ödemeler ve planlı kayıtlardır · Excel dosyasında "
+               "kuruşlu tutarlar, hareket dökümü ve kod listesi de vardır.")
+
+
+def hareket_bolumu(k, liste):
+    aylar = sorted({h["ay"] for h in liste}, reverse=True)
+    c1, c2, c3, c4 = st.columns([1, 1, 1.4, 1.4])
+    ay = c1.selectbox("Ay", ["Tümü"] + aylar, format_func=lambda a: a if a == "Tümü" else ay_etiketi(a),
+                      key="hareket_ay")
+    yon = c2.selectbox("Yön", ["Tümü", "Giriş", "Çıkış"], key="hareket_yon")
+    kodlar = c3.multiselect("Kalem", list(KODLAR), format_func=lambda x: f"{x} · {KODLAR[x][0]}",
+                            placeholder="Tüm kalemler", key="hareket_kod")
+    ara = c4.text_input("Ara", placeholder="Firma, işlem, açıklama…", key="hareket_ara").strip().lower()
+    secili = [h for h in liste
+              if (ay == "Tümü" or h["ay"] == ay) and (yon == "Tümü" or h["yon"] == yon)
+              and (not kodlar or h["kod"] in kodlar)
+              and (not ara or ara in f"{h['islem']} {h['karsi_taraf']} {h['kalem']}".lower())]
+    giris = sum(h["tutar"] for h in secili if h["yon"] == "Giriş")
+    cikis = sum(h["tutar"] for h in secili if h["yon"] == "Çıkış")
+    html(f'<div class="ozet3" style="grid-template-columns:repeat(4,1fr)">'
+         f'<div><div class="e">Kayıt</div><div class="d">{len(secili)}</div></div>'
+         f'<div><div class="e">Giriş</div><div class="d">{tl(giris)}</div></div>'
+         f'<div><div class="e">Çıkış</div><div class="d">{tl(cikis)}</div></div>'
+         f'<div><div class="e">Net</div><div class="d {"iyi" if giris >= cikis else "kotu"}">'
+         f'{"+" if giris > cikis else ""}{tl(giris - cikis)}</div></div></div>')
+    if not secili:
+        st.caption("Seçilen filtrelere uyan hareket yok.")
+        return
+    renk = {"Gecikti": "color:#b42318;font-weight:600", "Bekliyor": "color:#9a6700;font-weight:600",
+            "Plan": "color:#52606d;font-style:italic", "Gerçekleşti": "color:#1a7f37"}
+    df = pd.DataFrame(hareket_tablosu(secili))
+    st.dataframe(df.style.map(lambda d: renk.get(d, ""), subset=["Durum"])
+                 .map(lambda d: "color:#b42318" if d else "", subset=["Çıkış"]),
+                 hide_index=True, width="stretch", height=430,
+                 column_config={"Giriş": st.column_config.TextColumn(alignment="right", width="small"),
+                                "Çıkış": st.column_config.TextColumn(alignment="right", width="small"),
+                                "Tarih": st.column_config.TextColumn(width="small"),
+                                "Vade": st.column_config.TextColumn(width="small"),
+                                "Kod": st.column_config.NumberColumn(width="small", help=" · ".join(
+                                    f"{k} {v[0]}" for k, v in KODLAR.items())),
+                                "Durum": st.column_config.TextColumn(width="small")})
+    st.caption("Durum: " + " · ".join(DURUMLAR) + " — “Plan”: ileri tarihli ya da sizin eklediğiniz planlı kayıt. "
+               "Excel dosyasında (Nakit akış sekmesindeki düğme) bu döküm filtrelenebilir ve toplamlıdır.")
+
+
 # ---------- 2) FİRMA PANELİ ----------
 def firma_paneli(k):
     firma_id = k["firma_id"]  # Kural 2: firma_id OTURUMDAN; kullanıcı değiştiremez
@@ -450,8 +518,15 @@ def firma_paneli(k):
 
     st.write("")
     with st.container(key="alt_kart"):
-        t1, t2, t3 = st.tabs([":material/receipt_long: Yükümlülükler", ":material/event: Planlı ödeme ve tahsilatlar",
-                              ":material/outgoing_mail: Taleplerim"])
+        liste = hareketler(firma_id)
+        t0, th, t1, t2, t3 = st.tabs([":material/table_chart: Nakit akış tablosu", ":material/list_alt: Hareket dökümü",
+                                      ":material/receipt_long: Yükümlülükler",
+                                      ":material/event: Planlı ödeme ve tahsilatlar",
+                                      ":material/outgoing_mail: Taleplerim"])
+        with t0:
+            nakit_bolumu(k, liste)
+        with th:
+            hareket_bolumu(k, liste)
         with t1:
             df_y = pd.DataFrame([{"Tür": s["tur"], "Dönem": donem_tr(s["donem"]), "Tutar": tl(s["tutar_tl"]),
                                   "Son ödeme": tarih_tr(s["son_odeme_tarihi"]), "Durum": s["durum"],
@@ -523,6 +598,45 @@ def kuyruk_bolumu():
             st.rerun()
 
 
+def firma_portfoyu(talepler):
+    """Muhasebecinin tüm müşteri firmaları tek tabloda (rakamlar SQL'den; firma panelindekilerle aynı fonksiyonlar)."""
+    bugun = date.fromisoformat(BUGUN)
+    satirlar = []
+    for fid in firmalar():
+        f = firma_bilgisi(fid)
+        y = yukumlulukler(fid)
+        bu_ay = [s for s in y if s["son_odeme_tarihi"][:7] == BUGUN[:7] and s["durum"] != "Ödendi"]
+        geciken = [s for s in y if s["durum"] == "Gecikti"]
+        yakin = sorted((s for s in y if s["durum"] != "Ödendi" and s["son_odeme_tarihi"] >= BUGUN),
+                       key=lambda s: s["son_odeme_tarihi"])
+        df = aylik_tablo(fid, "Son 3 ay")
+        net = df["net"].sum() if not df.empty else 0
+        gun = (date.fromisoformat(yakin[0]["son_odeme_tarihi"]) - bugun).days if yakin else None
+        if geciken:
+            durum, ton = f"{len(geciken)} gecikme", "kirmizi"
+        elif gun is not None and gun <= 7:
+            durum, ton = f"{gun} gün içinde ödeme", "sari"
+        else:
+            durum, ton = "Sorunsuz", "yesil"
+        satirlar.append({
+            "unvan": f.get("unvan", fid), "sektor": f.get("sektor"), "calisan": f.get("calisan_sayisi") or "–",
+            "bu_ay": f"{tl(sum(s['tutar_tl'] for s in bu_ay))} <small>({len(bu_ay)})</small>",
+            "geciken": (f'<span style="color:#b42318;font-weight:600">{tl(sum(s["tutar_tl"] for s in geciken))}'
+                        f"</span> <small>({len(geciken)})</small>") if geciken else "–",
+            "en_yakin": (f"{tarih_tr(yakin[0]['son_odeme_tarihi'])} · {yakin[0]['tur']}") if yakin else "–",
+            "net": (f'<span style="color:{"#1a7f37" if net >= 0 else "#b42318"};font-weight:600">'
+                    f'{"+" if net > 0 else ""}{kisa_tl(net)}</span>'),
+            "talep": sum(1 for t in talepler if t["unvan"] == f.get("unvan")) or "–",
+            "durum": durum, "ton": ton})
+    with st.container(key="grafik_kart"):
+        kart_basligi("Firma portföyü", "Tüm müşteri firmalarınızın ödeme durumu tek bakışta",
+                     f"{len(satirlar)} firma")
+        st.write("")
+        html(portfoy_html(satirlar))
+        st.caption("Net (son 3 ay): gelir − gider (satış/alış faturaları, net maaş, vergi/prim, planlı kayıtlar). "
+                   "Durum: gecikmiş ödeme varsa kırmızı, 7 gün içinde son tarih varsa sarı.")
+
+
 def muhasebeci_paneli(k):
     talepler = bekleyen_talepler()
     html('<div class="ust-bar"><div><div class="ust-etiket">Muhasebeci paneli</div>'
@@ -541,6 +655,8 @@ def muhasebeci_paneli(k):
     mesaj = st.session_state.pop("onay_mesaji", None)  # st.rerun sonrası sonucu göster
     if mesaj:
         getattr(st, mesaj[0])(mesaj[1])
+    firma_portfoyu(talepler)
+    st.write("")
     with st.container(key="alt_kart"):
         kart_basligi("Bekleyen talepler", "Her talebi inceleyip onaylayın ya da reddedin",
                      f"{len(talepler)} talep")

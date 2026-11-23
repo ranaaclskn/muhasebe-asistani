@@ -487,6 +487,15 @@ def kullanici_dogrula(eposta, sifre):
     return None
 
 
+def firmalar():
+    """Tüm firmaların kimlikleri (YALNIZCA muhasebeci paneli için: firma oturumunda kullanılmaz)."""
+    con = baglan()
+    try:
+        return [r["id"] for r in con.execute("SELECT id FROM firmalar ORDER BY id")]
+    finally:
+        con.close()
+
+
 def firma_bilgisi(firma_id):
     """Panel başlığı ve yan menü için firma künyesi (unvan, tür, vergi no, sektör, çalışan sayısı)."""
     _firma_kontrol(firma_id)
