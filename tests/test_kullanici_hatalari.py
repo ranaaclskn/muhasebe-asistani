@@ -657,3 +657,13 @@ def test_gelecek_ay_vergi_tahmin(soru):  # 2026 yılı ödeme özetini veriyordu
     assert n["sorgu"] == "ay_odemeleri" and n["parametreler"] == ["2026-12"]
     c = cevapla_kayit(soru, "F001", n)["cevap"]
     assert "tahmin" in c and "643.278,61" not in c
+
+
+def test_ay_basi_bu_ay_tahmin_ve_gecikmis(monkeypatch):  # 2 Aralık: "bu ay ne ödeyeceğim" -> "kayıt yok" diyordu
+    import app.kayit as kayit
+    for m in (db, kayit):
+        monkeypatch.setattr(m, "BUGUN", "2026-12-02")
+    c = cevapla_kayit("Bu ay toplam ne kadar vergi ve prim ödeyeceğim?", "F001",
+                      {"sorgu": "ay_odemeleri", "parametreler": ["2026-12"]})["cevap"]
+    assert "Aralık 2026 için henüz kayıtlı yükümlülük yok" in c and "tahmin" in c
+    assert "gecikmiş ödemeniz var" in c and "Geçici vergi" in c

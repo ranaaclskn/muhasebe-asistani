@@ -17,10 +17,10 @@ from app.akis import devam, sor  # noqa: E402
 from app.bildirim import kuyrugu_isle, kuyrukta_bekleyenler, n8n_calisiyor  # noqa: E402
 from app.config import BUGUN  # noqa: E402
 from app.emirler import konu_degisti_mi, teklif_onayi, teklif_var_mi  # noqa: E402
-from app.db import (KILIT_DAKIKA, YONLER, GirisKilitli, bekleyen_talepler, erisilebilir_firma,  # noqa: E402
+from app.db import (KILIT_DAKIKA, YONLER, GirisKilitli, bekleyen_talepler, calistir, erisilebilir_firma,  # noqa: E402
                     firma_bilgisi, firma_talepleri, firmalar, giris_durumu, kayitli_eposta, kullanici_dogrula,
                     planli_islem_ekle, planli_islem_sil, planli_islemler, talep_karar, yukumlulukler)
-from app.kayit import AYLAR, donem_tr, tarih_tr, tl  # noqa: E402
+from app.kayit import AYLAR, AYLIK_TURLER, donem_tr, tarih_tr, tl  # noqa: E402
 from app.onay import firma_dosyasi_ac, onay_ver, son_denetim, talep_gonder  # noqa: E402
 from app.analiz import (cari_ekstre, cari_ozet, gostergeler, senaryo, takvim_olaylari, uyarilar,  # noqa: E402
                         yaslandirma)
@@ -832,15 +832,28 @@ def firma_paneli(k, goruntulenen=None):
             st.write("")
             html(uyarilar_html(liste_u))
         c1, c2 = st.columns(2)
-        kpi(c1, "Bu ay ödenecek", tl(sum(s["tutar_tl"] for s in bu_ay)), f"{len(bu_ay)} ödeme")
+        if bu_ay:
+            kpi(c1, "Bu ay ödenecek", tl(sum(s["tutar_tl"] for s in bu_ay)), f"{len(bu_ay)} ödeme")
+        else:  # ay başı: beyannameler henüz verilmedi, tahakkuk yok -> son 3 dönem ortalamasıyla tahmin
+            tahmin = 0.0
+            for tur in AYLIK_TURLER:
+                gecmis = calistir("donem_gecmisi", firma_id, tur)
+                # her tür ayrı yuvarlanır (asistanın tahmin cevabıyla kuruşu kuruşuna aynı toplam)
+                tahmin += round(sum(s["tutar_tl"] for s in gecmis) / len(gecmis), 2) if gecmis else 0
+            kpi(c1, "Bu ay ödenecek", f"≈ {tl(round(tahmin, 2))}" if tahmin else tl(0),
+                "Tahmini · beyannameler henüz verilmedi" if tahmin else "Bu ay ödeme yok")
         kpi(c2, "Geciken ödeme", len(geciken),
             tl(sum(s["tutar_tl"] for s in geciken)) if geciken else "Gecikme yok", "kotu" if geciken else "")
         c3, c4 = st.columns(2)
-        if yaklasan:
-            kpi(c3, "En yakın son tarih", tarih_tr(yaklasan[0]["son_odeme_tarihi"]),
-                f"{yaklasan[0]['tur']} · {tl(yaklasan[0]['tutar_tl'])}")
+        # En yakın ödeme: vergi/prim son tarihi ya da kullanıcının planlı ödemesi (ay başında vergi kaydı olmaz)
+        adaylar = [(s["son_odeme_tarihi"], s["tur"], s["tutar_tl"]) for s in yaklasan]
+        adaylar += [(p["tarih"], p["aciklama"], p["tutar_tl"]) for p in planli_islemler(firma_id)
+                    if p["yon"] == "Gider" and p["tarih"] >= BUGUN]
+        if adaylar:
+            tarih, ad, tutar = min(adaylar)
+            kpi(c3, "En yakın ödeme", tarih_tr(tarih), f"{ad} · {tl(tutar)}")
         else:
-            kpi(c3, "En yakın son tarih", "—", "Bekleyen ödeme yok")
+            kpi(c3, "En yakın ödeme", "—", "Bekleyen ödeme yok")
         if not df.empty:
             net = df["net"].sum()
             kpi(c4, f"Net durum · {pencere.lower()}", ("+" if net > 0 else "") + kisa_tl(net),

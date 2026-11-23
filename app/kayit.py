@@ -512,11 +512,19 @@ def _cevapla_kayit(soru, firma_id, niyet):
         return bordro_cevabi(soru, firma_id) or {"cevap": CEKIMSER, "kaynaklar": [], "satirlar": [],
                                                   "yontem": "cekimser"}
     satirlar = calistir(sorgu, firma_id, *parametreler)
-    # Gelecek bir ayın ödemeleri sorulmuş ama henüz kayıt yok -> "bilgi yok" yerine TAHMİN
-    if not satirlar and sorgu == "ay_odemeleri" and parametreler and parametreler[0] > BUGUN[:7]:
+    # Bu ay ya da gelecek bir ayın ödemeleri sorulmuş ama henüz kayıt yok -> "bilgi yok" yerine TAHMİN.
+    # (Ay başında, ör. 2 Aralık'ta, Kasım beyannameleri henüz verilmediği için bu ayın kaydı da olmaz.)
+    if not satirlar and sorgu == "ay_odemeleri" and parametreler and parametreler[0] >= BUGUN[:7]:
         r = tahmin_cevabi(firma_id, *parametreler)
         r["cevap"] = (f"{donem_tr(parametreler[0])} için henüz kayıtlı yükümlülük yok (beyannameler verilince "
                       f"oluşur). Geçmiş dönemlere göre tahmin:\n\n" + r["cevap"])
+        gecikmis = calistir("gecikmis", firma_id) if parametreler[0] == BUGUN[:7] else []
+        if gecikmis:  # önceki aylardan kalan borç bu ayın listesinde yok; gözden kaçmasın
+            r["cevap"] += (f"\n\n**Ayrıca {len(gecikmis)} gecikmiş ödemeniz var:** "
+                           + ", ".join(f"{s['tur']} {tl(s['tutar_tl'])} (son tarih {tarih_tr(s['son_odeme_tarihi'])})"
+                                       for s in gecikmis) + ". Gecikme zammı için “gecikmiş ödemelerimin faizi ne "
+                           "kadar?” diye sorabilirsiniz.")
+            r["kaynaklar"] = list(r.get("kaynaklar", [])) + [s["id"] for s in gecikmis]
         return r
     if not satirlar:  # Kural 4: model çağrılmaz
         bos = BOS_SONUC.get(sorgu)  # bazı sorgularda "kayıt yok" da bir cevaptır

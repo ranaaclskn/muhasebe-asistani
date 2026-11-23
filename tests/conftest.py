@@ -4,3 +4,5 @@ Gerçek-tarih davranışı (gecikmiş sayılma) testlerde monkeypatch ile ayrıc
 import os
 
 os.environ["BUGUN"] = "2026-11-11"  # app.config import edilmeden ÖNCE
+# .env sunum ayarı (MUHASEBE_DB=data/demo.db) testlere sızmasın: testler geliştirme veritabanıyla çalışır
+os.environ["MUHASEBE_DB"] = "data/muhasebe.db"

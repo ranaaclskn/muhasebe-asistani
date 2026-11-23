@@ -1,6 +1,7 @@
 .venv/
 .env
 data/muhasebe.db
+data/demo.db
 data/chroma/
 data/sonuclar.csv
 __pycache__/

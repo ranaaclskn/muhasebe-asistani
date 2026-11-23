@@ -11,7 +11,9 @@ load_dotenv(KOK / ".env")
 VERI_DIR = KOK / "data"
 CSV_DIR = VERI_DIR / "csv"
 BELGE_DIR = VERI_DIR / "belgeler"
-DB_YOLU = VERI_DIR / "muhasebe.db"
+# Veritabanı: varsayılan geliştirme veritabanı. Sunum için .env'e  MUHASEBE_DB=data/demo.db  yazılır
+# (scripts/10_demo_hazirla.py kurar). Göreli yol proje klasörüne göredir. Testler her zaman muhasebe.db'yi kullanır.
+DB_YOLU = KOK / os.getenv("MUHASEBE_DB", "data/muhasebe.db")
 CHROMA_DIR = VERI_DIR / "chroma"
 KOLEKSIYON = "muhasebe"
 
