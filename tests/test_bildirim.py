@@ -55,7 +55,8 @@ def onaylanmis_talep(emir="belge_gonder", firma_id="F001"):
         t = db.talep_ekle(firma_id, "Eylül KDV beyannamemi e-postama gönder.", emir=emir,
                           detay={"belge_turu": "KDV", "donem": "2026-09", "dosya": f"{firma_id}_KDV_2026-09.txt",
                                  "eposta": "gida@demo.local"},
-                          ozet="Eylül 2026 KDV beyannamesi kayıtlı e-postanıza gönderilecek.")
+                          ozet="Eylül 2026 KDV beyannamesi (F001_KDV_2026-09.txt) kayıtlı e-posta adresinize "
+                               "(gida@demo.local) gönderilecek.")  # akis.py'nin onay sorusundaki biçim
     else:
         t = db.talep_ekle(firma_id, "Muhasebeciyle görüşme talebi oluştur", emir="gorusme_talebi",
                           detay={"konu": "Muhasebeciyle görüşme"}, ozet="Görüşme talebi “Muhasebeciyle görüşme”")
@@ -73,6 +74,9 @@ def test_onaylanan_belge_ekiyle_n8ne_gider(ortam):
     assert r == [{"talep_id": t, "ok": True, "eposta": "gida@demo.local"}]
     istek = ortam.istekler[0]
     assert istek["url"].endswith("/webhook/talep-onay") and istek["veri"]["eposta"] == "gida@demo.local"
+    # giden e-postada gelecek zamanlı onay cümlesi kalmaz, yalnız NE gönderildiği yazar
+    assert "Talep: Eylül 2026 KDV beyannamesi (F001_KDV_2026-09.txt)\n" in istek["veri"]["metin"]
+    assert "gönderilecek" not in istek["veri"]["metin"]
     ad, icerik, _ = istek["ek"]
     assert ad == "F001_KDV_2026-09.txt" and "KDV BEYANNAMESİ" in icerik.decode("utf-8")
     assert satir("SELECT durum FROM gonderimler WHERE talep_id = ?", t)["durum"] == "Gönderildi"

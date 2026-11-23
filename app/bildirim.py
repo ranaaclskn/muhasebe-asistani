@@ -16,6 +16,7 @@ Hatırlatma: scripts/05_hatirlatma.py -> hatirlatma_gonder() -> POST {N8N_URL}/w
 
 Kontrol (proje klasöründen):  python -m pytest -q tests/test_bildirim.py
 """
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -62,11 +63,17 @@ def _belge(dosya):
     return (yol.name, yol.read_bytes(), "text/plain; charset=utf-8") if yol.is_file() else None
 
 
+def _ozet_sade(ozet):
+    """Onay sorusundaki özet gelecek zamanla yazılmış ("... kayıtlı e-posta adresinize (x) gönderilecek.");
+    giden e-postada yalnızca NE gönderildiği kalsın: "Eylül 2026 KDV beyannamesi (F001_KDV_2026-09.txt)"."""
+    return re.sub(r"\s*kayıtlı e-posta adresinize \([^)]*\) gönderilecek\..*$", "", ozet or "", flags=re.S).strip()
+
+
 def _talep_epostasi(g, talep):
     """Bir gönderim kaydından e-posta içeriğini hazırla. Adres her zaman KAYITLI adrestir (Kural 5)."""
     unvan = firma_bilgisi(g["firma_id"]).get("unvan", g["firma_id"])
     eposta = g["eposta"] or kayitli_eposta(g["firma_id"])
-    ozet = talep["ozet"] or talep["talep_metni"]
+    ozet = _ozet_sade(talep["ozet"]) or talep["talep_metni"]
     ek = _belge(g["dosya"]) if g["dosya"] else None
     if g["dosya"] and not ek:
         raise RuntimeError(f"Belge dosyası bulunamadı: {g['dosya']}")
