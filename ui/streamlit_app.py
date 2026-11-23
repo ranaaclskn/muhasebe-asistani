@@ -26,6 +26,8 @@ from app.analiz import (cari_ekstre, cari_ozet, gostergeler, senaryo, takvim_ola
                         yaslandirma)
 from app.nakit import DURUMLAR, KODLAR, donem_aylari, hareketler, nakit_akis_tablosu  # noqa: E402
 from app.rapor import dosya_adi, rapor_pdf, secilebilir_aylar, varsayilan_ay  # noqa: E402
+from app.alacak import acik_alacaklar, musteri_performansi  # noqa: E402
+from app.alacak import ozet as alacak_ozeti, yaslandirma as alacak_yaslandirma  # noqa: E402
 from ui.analiz_gorunum import (ANALIZ_CSS, ay_adi, cari_html, saglik_html, senaryo_grafigi,  # noqa: E402
                                takvim_html, uyarilar_html, yaslandirma_html, yaslandirma_tablo_html)
 from ui.grafik import PENCERELER, aylik_tablo, gider_dagilimi, grafik, kisa_tl  # noqa: E402
@@ -410,8 +412,9 @@ def grafik_bolumu(firma_id, df, pencere):
             return
         html(ozet_html(df))
         st.altair_chart(grafik(df), width="stretch")
-        st.caption("Gelir: satış faturaları ve planlı tahsilatlar. Gider: alış faturaları, net maaşlar, vergi/prim ve "
-                   "planlı ödemeler. Açık renkli çubuklar ileri tarihli (planlanan) aylardır.")
+        st.caption("Gelir: müşteri tahsilatları (tahsil günü; tahsil edilmemiş fatura vadesinin ayında) ve planlı "
+                   "tahsilatlar. Gider: alış faturaları, net maaşlar, vergi/prim ve planlı ödemeler. Açık renkli "
+                   "çubuklar ileri tarihli (planlanan) aylardır.")
         t1, t2 = st.tabs(["Gider dağılımı", "Tablo"])
         with t1:
             html(dagilim_html(gider_dagilimi(firma_id, set(df["ay"]))))
@@ -544,6 +547,52 @@ def takvim_bolumu(firma_idler, anahtar, kisa_adlar=None):
     st.caption("Kutucuklar son ödeme günleridir; üzerine gelince ayrıntı görünür. Lacivert çerçeve: bugün.")
 
 
+def _gun_metni(gun):
+    return f"{gun} gün gecikti" if gun > 0 else ("Bugün vadesi" if gun == 0 else f"{-gun} gün kaldı")
+
+
+def alacak_bolumu(firma_id):
+    """Alacak takibi (app/alacak.py): açık satış faturaları, yaşlandırma, müşteri bazında tahsil süresi."""
+    o = alacak_ozeti(firma_id)
+    c1, c2, c3, c4 = st.columns(4)
+    kpi(c1, "Açık alacak", tl(o["acik_tutar"]), f"{o['acik_adet']} fatura henüz tahsil edilmedi")
+    kpi(c2, "Vadesi geçen", tl(o["vadesi_gecen_tutar"]),
+        f"{o['vadesi_gecen_adet']} fatura · en eskisi {o['en_uzun_gecikme']} gün" if o["vadesi_gecen_adet"]
+        else "Vadesi geçen alacak yok", "kotu" if o["vadesi_gecen_adet"] else "iyi")
+    kpi(c3, "Ortalama tahsil süresi", "—" if o["ort_tahsil_gun"] is None else f"{o['ort_tahsil_gun']:.0f} gün",
+        "" if o["zamaninda_oran"] is None else f"Vadesinde ödenen fatura %{o['zamaninda_oran'] * 100:.0f}")
+    kpi(c4, "Alacak devir süresi", "—" if o["dso_gun"] is None else f"{o['dso_gun']:.0f} gün",
+        "Kaç günlük satış henüz kasada değil")
+    html('<div class="bolum-etiket">Alacak yaşlandırması (tahsil edilmemiş satış faturaları)</div>')
+    html(yaslandirma_html(alacak_yaslandirma(firma_id), "fatura"))
+    sol, sag = st.columns([1, 1.15], gap="medium")
+    with sol:
+        html('<div class="bolum-etiket">Açık alacaklar</div>')
+        acik = acik_alacaklar(firma_id)
+        if acik:
+            df = pd.DataFrame([{"Fatura": a["id"], "Müşteri": a["musteri"], "Vade": tarih_tr(a["vade"]),
+                                "Tutar": tl(a["tutar"]), "Durum": _gun_metni(a["gecikme_gun"])} for a in acik])
+            st.dataframe(df.style.map(lambda d: "color:#b42318;font-weight:600" if "gecikti" in str(d) else "",
+                                      subset=["Durum"]), hide_index=True, width="stretch", height=300)
+            csv_indir(df, "acik_alacaklar.csv")
+        else:
+            st.caption("Tahsil edilmemiş satış faturası yok.")
+    with sag:
+        html('<div class="bolum-etiket">Müşteriler ne kadar sürede ödüyor?</div>')
+        mp = musteri_performansi(firma_id)
+        df_m = pd.DataFrame([{
+            "Müşteri": m["musteri"], "Açık": tl(m["acik"]) if m["acik"] else "–",
+            "Vadesi geçen": tl(m["vadesi_gecen"]) if m["vadesi_gecen"] else "–",
+            "Ort. tahsil": "—" if m["ort_tahsil_gun"] is None else f"{m['ort_tahsil_gun']:.0f} gün",
+            "Ort. gecikme": "—" if m["ort_gecikme_gun"] is None else f"{m['ort_gecikme_gun']:.0f} gün",
+            "Vadesinde": "—" if m["zamaninda_oran"] is None else f"%{m['zamaninda_oran'] * 100:.0f}"} for m in mp])
+        st.dataframe(df_m.style.map(lambda d: "color:#b42318;font-weight:600" if d not in ("–", "") else "",
+                                    subset=["Vadesi geçen"]), hide_index=True, width="stretch", height=300)
+    st.caption("Ortalama tahsil: fatura tarihinden tahsile geçen gün. Ortalama gecikme: vadeden sonra geçen gün "
+               "(vadeden önce ödenen 0). Alacak devir süresi: açık alacak / son 90 günün günlük ortalama satışı. "
+               "Nakit akışında satış parası tahsil günü girer; tahsil edilmemiş fatura vadesinde Bekliyor/Gecikti görünür.")
+
+
 def cari_bolumu(firma_id):
     c1, c2, _ = st.columns([1.2, 1.2, 2])
     tur = c1.segmented_control("Cari türü", ["Müşteriler", "Satıcılar"], default="Müşteriler", key="cari_tur",
@@ -611,7 +660,7 @@ def rapor_bolumu(firma_id):
     ay = c1.selectbox("Rapor ayı", secilebilir_aylar(), format_func=donem_tr, key="rapor_ayi")
     with c2:
         rapor_dugmesi(firma_id, ay, "rapor_indir", "PDF indir", tip="primary")
-    st.caption(f"{donem_tr(ay)} için iki sayfalık yönetici özeti. Rakamlar paneldekiyle aynı fonksiyonlardan "
+    st.caption(f"{donem_tr(ay)} için üç sayfalık yönetici özeti. Rakamlar paneldekiyle aynı fonksiyonlardan "
                "hesaplanır; yapay zekâ modeli rakam üretmez.")
     html('<div class="bolum-etiket">Raporun içeriği</div>')
     st.markdown(f"""
@@ -622,6 +671,7 @@ def rapor_bolumu(firma_id):
 - **Nakit akış tablosu** (6 ay, kümülatif)
 - **Finansal sağlık puanı** ve bileşenleri
 - **Geciken ve 30 gün içinde ödenecekler**
+- **Açık alacaklar:** tahsil edilmemiş satış faturaları, vadesi geçenler önce
 
 Uyarılar, sağlık puanı ve ödemeler rapor tarihindeki ({tarih_tr(BUGUN)}) güncel durumu gösterir.""")
 
@@ -747,9 +797,10 @@ def firma_paneli(k, goruntulenen=None):
     st.write("")
     with st.container(key="alt_kart"):
         liste = hareketler(firma_id)
-        t0, th, tk, tc, ts, tn, tr, t1, t2, t3 = st.tabs([
+        t0, th, tk, tc, ta, ts, tn, tr, t1, t2, t3 = st.tabs([
             ":material/table_chart: Nakit akış", ":material/list_alt: Hareketler",
             ":material/calendar_month: Ödeme takvimi", ":material/groups: Cari hesaplar",
+            ":material/request_quote: Alacaklar",
             ":material/monitor_heart: Finansal sağlık", ":material/tune: Senaryo",
             ":material/picture_as_pdf: Aylık rapor",
             ":material/receipt_long: Yükümlülükler", ":material/event: Planlı kayıtlar",
@@ -762,6 +813,8 @@ def firma_paneli(k, goruntulenen=None):
             takvim_bolumu([firma_id], "firma_takvim")
         with tc:
             cari_bolumu(firma_id)
+        with ta:
+            alacak_bolumu(firma_id)
         with ts:
             saglik_bolumu(firma_id)
         with tn:
@@ -918,8 +971,12 @@ def muhasebeci_paneli(k):
         with ta:
             takvim_bolumu(fids, "muh_takvim", {f: firma_kisa_adi(firma_bilgisi(f).get("unvan", f)) for f in fids})
         with ty:
+            html('<div class="bolum-etiket">Vergi ve prim borçları (ödenmemiş)</div>')
             html(yaslandirma_tablo_html([(firma_bilgisi(f).get("unvan", f), yaslandirma(f)) for f in fids]))
-            st.caption("Ödenmemiş vergi/prim yükümlülükleri, son ödeme gününden bugüne geçen süreye göre gruplanmıştır.")
+            html('<div class="bolum-etiket" style="margin-top:14px">Müşteri alacakları (tahsil edilmemiş satış '
+                 'faturaları)</div>')
+            html(yaslandirma_tablo_html([(firma_bilgisi(f).get("unvan", f), alacak_yaslandirma(f)) for f in fids]))
+            st.caption("Vergi/prim: son ödeme gününden, alacak: fatura vadesinden bugüne geçen süreye göre gruplanmıştır.")
     st.write("")
     with st.container(key="alt_kart"):
         kart_basligi("Bekleyen talepler", "Her talebi inceleyip onaylayın ya da reddedin",

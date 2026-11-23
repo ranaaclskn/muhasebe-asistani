@@ -330,8 +330,36 @@ def _sema_guncelle(con):
     if mevcut:  # yalnızca kurulmuş bir veritabanında (01 çalıştıysa) yeni tabloları ekle
         con.executescript(PLANLI_ISLEMLER_SEMA)
         bordro_tablolari_kur(con)
+        fatura_vadelerini_guncelle(con)
     con.commit()
     _SEMA_GUNCEL = True
+
+
+def fatura_vadelerini_guncelle(con):
+    """Alacak takibi: faturalara vade_tarihi ve odeme_tarihi (satışta TAHSİL günü) kolonları. Eski veritabanında
+    kolonlar yoksa eklenir ve data/csv/faturalar.csv'den doldurulur; CSV'deki yeni (açılış) faturalar da eklenir.
+    Kolonlar zaten varsa hiçbir şey yapılmaz (kullanıcının verisi ezilmez). Veri: scripts/08_alacak_verisi.py"""
+    import csv
+    from app.config import CSV_DIR
+    kolonlar = {r[1] for r in con.execute("PRAGMA table_info(faturalar)")}
+    if not kolonlar or {"vade_tarihi", "odeme_tarihi"} <= kolonlar:
+        return
+    for kolon in ("vade_tarihi", "odeme_tarihi"):
+        if kolon not in kolonlar:
+            con.execute(f"ALTER TABLE faturalar ADD COLUMN {kolon} TEXT NULL")
+    yol = CSV_DIR / "faturalar.csv"
+    if not yol.exists():
+        return
+    with open(yol, encoding="utf-8", newline="") as f:
+        satirlar = list(csv.DictReader(f))
+    if "vade_tarihi" not in (satirlar[0] if satirlar else {}):
+        return
+    for s in satirlar:
+        con.execute("INSERT OR IGNORE INTO faturalar (id, firma_id, tip, karsi_taraf, tarih, tutar_tl, kdv_orani) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)", (s["id"], s["firma_id"], s["tip"], s["karsi_taraf"], s["tarih"],
+                                                    float(s["tutar_tl"]), float(s["kdv_orani"] or 0)))
+        con.execute("UPDATE faturalar SET vade_tarihi = ?, odeme_tarihi = ? WHERE id = ?",
+                    (s["vade_tarihi"] or None, s["odeme_tarihi"] or None, s["id"]))
 
 
 def baglan():
@@ -626,17 +654,21 @@ def yukumlulukler(firma_id):
 
 def aylik_gelir_gider(firma_id):
     """Grafik için firmanın ay ay para giriş/çıkışları (kalem bazında). Satırlar:
-    {"ay": "2026-10", "yon": "Gelir"|"Gider", "kalem": "Satış faturaları", "tutar": 12345.6}
+    {"ay": "2026-10", "yon": "Gelir"|"Gider", "kalem": "Müşteri tahsilatları", "tutar": 12345.6}
 
-    Gelir: satış faturaları + kullanıcının planladığı tahsilatlar.
+    Gelir: satış faturalarının TAHSİLATI + kullanıcının planladığı tahsilatlar. Satış faturasının ayı: tahsil
+    edildiyse tahsil günü, edilmediyse vade günü (app/nakit.hareketler ile aynı kural; ay toplamları test edilir).
     Gider: alış faturaları + net maaş ödemeleri + vergi/prim yükümlülükleri + planlı ödemeler.
     (Maaşta NET kullanılır: SGK/muhtasar kesintisi zaten yükümlülük olarak sayılıyor, çift sayılmasın.)
     Yükümlülüğün ayı: ödendiyse ödeme tarihi, değilse son ödeme tarihi."""
     _firma_kontrol(firma_id)
     sql = """
-        SELECT substr(tarih, 1, 7) AS ay,
+        SELECT substr(CASE WHEN tip = 'Satış' AND vade_tarihi IS NOT NULL THEN
+                          CASE WHEN odeme_tarihi IS NOT NULL AND odeme_tarihi <= :bugun THEN odeme_tarihi
+                               ELSE vade_tarihi END
+                      ELSE tarih END, 1, 7) AS ay,
                CASE tip WHEN 'Satış' THEN 'Gelir' ELSE 'Gider' END AS yon,
-               CASE tip WHEN 'Satış' THEN 'Satış faturaları' ELSE 'Alış faturaları' END AS kalem,
+               CASE tip WHEN 'Satış' THEN 'Müşteri tahsilatları' ELSE 'Alış faturaları' END AS kalem,
                SUM(tutar_tl) AS tutar
         FROM faturalar WHERE firma_id = :f GROUP BY 1, 2, 3
         UNION ALL
@@ -652,7 +684,7 @@ def aylik_gelir_gider(firma_id):
         ORDER BY 1"""
     con = baglan()
     try:
-        return [dict(r) for r in con.execute(sql, {"f": firma_id})]
+        return [dict(r) for r in con.execute(sql, {"f": firma_id, "bugun": BUGUN})]
     finally:
         con.close()
 

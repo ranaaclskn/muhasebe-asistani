@@ -119,10 +119,10 @@ def ay_adi(ay):
     return f"{AYLAR[int(a) - 1]} {y}"
 
 
-def yaslandirma_html(kovalar):
+def yaslandirma_html(kovalar, birim="ödeme"):
     return ANALIZ_CSS + '<div class="kova">' + "".join(
         f'<div class="k{i}"><div class="e">{k}</div><div class="t">{tl(v["tutar"])}</div>'
-        f'<div class="a">{v["adet"]} ödeme</div></div>' for i, (k, v) in enumerate(kovalar.items(), 1)) + "</div>"
+        f'<div class="a">{v["adet"]} {birim}</div></div>' for i, (k, v) in enumerate(kovalar.items(), 1)) + "</div>"
 
 
 def yaslandirma_tablo_html(satirlar):
@@ -167,7 +167,7 @@ def saglik_html(g):
         return f"%{x * 100:.0f}".replace(".", ",")
     buyume = "—" if g["buyume"] is None else ("+" if g["buyume"] > 0 else "−") + yuzde(abs(g["buyume"]))
     metrikler = [
-        ("Net nakit marjı", yuzde(g["net_marj"]), f"Son {g['ay_sayisi']} ay: (gelir − gider) / satış"),
+        ("Net marj", yuzde(g["net_marj"]), f"Son {g['ay_sayisi']} ay: (satış − gider) / satış"),
         ("Gelir büyümesi", buyume, "Son 3 tamamlanmış ay / önceki 3 ay"),
         ("Personel gider oranı", yuzde(g["personel_orani"]), "(Net maaş + SGK + muhtasar) / satış"),
         ("Vergi yükü", yuzde(g["vergi_orani"]), "(KDV + geçici vergi) / satış"),

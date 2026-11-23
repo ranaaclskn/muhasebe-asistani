@@ -22,7 +22,7 @@ from pathlib import Path
 from fpdf import FPDF
 from fpdf.fonts import FontFace
 
-from app import analiz, db
+from app import alacak, analiz, db
 from app.kayit import AYLAR, donem_tr, tarih_tr, tl
 from app.nakit import KODLAR, _ay_ekle, hareketler, nakit_akis_tablosu
 
@@ -67,7 +67,7 @@ def rapor_verisi(firma_id, ay=None):
     def en_buyukler(kod, n=5):
         g = {}
         for h in liste:
-            if h["ay"] == ay and h["kod"] == kod:
+            if h["belge_ay"] == ay and h["kod"] == kod:  # fatura ayına göre (tahsilat gecikmesinden bağımsız)
                 g[h["karsi_taraf"]] = g.get(h["karsi_taraf"], 0) + h["tutar"]
         toplam = sum(g.values()) or 1
         return [{"ad": k, "tutar": round(v, 2), "pay": v / toplam}
@@ -102,6 +102,7 @@ def rapor_verisi(firma_id, ay=None):
         "grafik": grafik, "aylar": aylar, "tablo": tablo,
         "uyarilar": analiz.uyarilar(firma_id), "saglik": analiz.gostergeler(firma_id),
         "odemeler": odemeler,
+        "alacak": {"ozet": alacak.ozet(firma_id), "acik": alacak.acik_alacaklar(firma_id)},
     }
 
 
@@ -378,13 +379,14 @@ def rapor_pdf(firma_id, ay=None, veri=None):
     pdf.yazi(7, renk=MURE)
     buyume = _yuzde(g["buyume"], True)
     pdf.multi_cell(genislik, 3.8,
-                   f"Net nakit marjı {_yuzde(g['net_marj'])} · Gelir büyümesi {buyume} (son 3 tamamlanmış ay / önceki "
+                   f"Net marj {_yuzde(g['net_marj'])} · Gelir büyümesi {buyume} (son 3 tamamlanmış ay / önceki "
                    f"3 ay) · Personel gider oranı {_yuzde(g['personel_orani'])} · Vergi yükü {_yuzde(g['vergi_orani'])}"
                    f" · Birikmiş nakit {tl(g['birikmis'])}, aylık gideri "
                    + f"{g['karsilama_ay']:.1f}".replace(".", ",") + " ay karşılıyor.",
                    new_x="LMARGIN", new_y="NEXT")
 
-    # --- yaklaşan ödemeler ---
+    # --- SAYFA 3: borçlar ve alacaklar (sabit sayfa: içerik veriye göre uzayınca rapor kaymasın) ---
+    pdf.add_page()
     pdf.bolum("Geciken ve önümüzdeki 30 günde ödenecekler",
               f"Rapor tarihi ({tarih_tr(v['rapor_tarihi'])}) itibarıyla · vergi/prim ve planlı ödemeler")
     if v["odemeler"]:
@@ -402,6 +404,28 @@ def rapor_pdf(firma_id, ay=None, veri=None):
     else:
         pdf.yazi(8, renk=MURE)
         pdf.cell(0, 5, "Geciken ya da 30 gün içinde son tarihi gelen ödeme yok.", new_x="LMARGIN", new_y="NEXT")
+
+    # --- açık alacaklar ---
+    ao, acik = v["alacak"]["ozet"], v["alacak"]["acik"]
+    ort = "—" if ao["ort_tahsil_gun"] is None else f"{ao['ort_tahsil_gun']:.0f} gün"
+    pdf.bolum("Açık alacaklar (tahsil edilmemiş satış faturaları)",
+              f"Rapor tarihi itibarıyla · toplam {tl(ao['acik_tutar'])}, vadesi geçen {tl(ao['vadesi_gecen_tutar'])} · "
+              f"müşteriler ortalama {ort} içinde ödüyor")
+    if acik:
+        satirlar, vurgu = [], {}
+        for i, a in enumerate(acik[:10]):  # en çok geciken 10
+            g = a["gecikme_gun"]
+            if g > 0:
+                vurgu[i] = "kirmizi"
+            satirlar.append((tarih_tr(a["vade"]), a["musteri"], a["id"], tl(a["tutar"]),
+                             f"{g} gün gecikti" if g > 0 else ("Bugün" if g == 0 else f"{-g} gün")))
+        if len(acik) > 10:
+            satirlar.append(("", f"+{len(acik) - 10} fatura daha · tamamı panelde (Alacaklar)", "", "", ""))
+        pdf.tablo(["Vade", "Müşteri", "Fatura", "Tutar", "Durum"], satirlar,
+                  [22, 62, 26, 34, genislik - 144], ("LEFT", "LEFT", "LEFT", "RIGHT", "RIGHT"), vurgu)
+    else:
+        pdf.yazi(8, renk=MURE)
+        pdf.cell(0, 5, "Tahsil edilmemiş satış faturası yok.", new_x="LMARGIN", new_y="NEXT")
     return bytes(pdf.output())
 
 

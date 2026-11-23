@@ -15,6 +15,12 @@ from app.nakit import _ay_ekle, hareketler
 GERCEK_KODLAR = {10, 37, 38, 52, 53, 54, 58}  # planlı kayıtlar (19, 70) göstergelere katılmaz
 
 
+def _tahsil_edilmemis(h):
+    """Alacak takibi: vadesi gelmiş ama TAHSİL EDİLMEMİŞ satış faturası nakit değildir (kasaya girmemiştir).
+    Ödenmemiş vergi/prim ise ihtiyatla gider sayılmaya devam eder (borç zaten doğmuştur)."""
+    return h["kod"] == 10 and h["durum"] != "Gerçekleşti"
+
+
 def _bugun():
     return date.fromisoformat(db.BUGUN)
 
@@ -44,6 +50,17 @@ def uyarilar(firma_id):
                                                    f"{tl(round(sum(s['tutar_tl'] for s in yakin), 2))}",
                       "detay": ", ".join(f"{s['tur']} {tarih_tr(s['son_odeme_tarihi'])}" for s in
                                          sorted(yakin, key=lambda s: s["son_odeme_tarihi"]))})
+    from app.alacak import acik_alacaklar  # alacak modülü analiz'i içe aktarmaz; döngü yok
+    gecen = [a for a in acik_alacaklar(firma_id) if a["gecikme_gun"] > 0]
+    if gecen:
+        musteriler = {}
+        for a in gecen:
+            musteriler[a["musteri"]] = musteriler.get(a["musteri"], 0) + a["tutar"]
+        sonuc.append({"seviye": "kritik" if any(a["gecikme_gun"] > 60 for a in gecen) else "uyari",
+                      "baslik": f"Vadesi geçmiş {len(gecen)} alacak · {tl(round(sum(a['tutar'] for a in gecen), 2))}",
+                      "detay": ", ".join(f"{m} {tl(round(t, 2))}" for m, t in
+                                          sorted(musteriler.items(), key=lambda x: -x[1]))
+                      + f" — en eskisi {max(a['gecikme_gun'] for a in gecen)} gün gecikmiş; müşteriyi arayın"})
     cari = cari_ozet(firma_id, 10, 6)
     if cari and cari[0]["pay"] >= 0.35:
         sonuc.append({"seviye": "uyari", "baslik": f"Satışların %{cari[0]['pay'] * 100:.0f}'i tek müşteriden",
@@ -61,11 +78,13 @@ def uyarilar(firma_id):
                                          for p in buyuk)})
     if not sonuc:
         sonuc.append({"seviye": "iyi", "baslik": "Her şey yolunda", "detay": "Gecikmiş ya da yaklaşan ödeme yok."})
-    return sonuc
+    sira = ["kritik", "uyari", "bilgi", "iyi"]  # önem sırası (aynı seviyede ekleme sırası korunur)
+    return sorted(sonuc, key=lambda u: sira.index(u["seviye"]))
 
 
 def _ay_neti(firma_id, ay):
-    return sum((h["tutar"] if h["yon"] == "Giriş" else -h["tutar"]) for h in hareketler(firma_id) if h["ay"] == ay)
+    return sum((h["tutar"] if h["yon"] == "Giriş" else -h["tutar"]) for h in hareketler(firma_id)
+               if h["ay"] == ay and not _tahsil_edilmemis(h))
 
 
 # ---------- 2) Ödeme takvimi ----------
@@ -107,7 +126,7 @@ def cari_ozet(firma_id, kod, son_n=None):
     aylar = set(_son_aylar(son_n)) if son_n else None
     gruplar = {}
     for h in hareketler(firma_id):
-        if h["kod"] != kod or (aylar and h["ay"] not in aylar):
+        if h["kod"] != kod or (aylar and h["belge_ay"] not in aylar):  # fatura ayına göre (satış/alış payı)
             continue
         g = gruplar.setdefault(h["karsi_taraf"], {"karsi_taraf": h["karsi_taraf"], "toplam": 0.0, "adet": 0,
                                                    "ilk": h["tarih"], "son": h["tarih"]})
@@ -138,13 +157,16 @@ def gostergeler(firma_id, son_n=6):
     """Son n ayın (bu ay dahil, yalnız GERÇEK hareketler) göstergeleri + 0–100 puan ve bileşenleri."""
     aylar = set(_son_aylar(son_n))
     tum = hareketler(firma_id)
-    h = [x for x in tum if x["ay"] in aylar and x["kod"] in GERCEK_KODLAR]
-    t = {k: sum(x["tutar"] for x in h if x["kod"] == k) for k in GERCEK_KODLAR}
-    satis = t[10] or 1
+    h = [x for x in tum if x["ay"] in aylar and x["kod"] in GERCEK_KODLAR and not _tahsil_edilmemis(x)]
+    t = {k: sum(x["tutar"] for x in h if x["kod"] == k) for k in GERCEK_KODLAR}  # t[10] = TAHSİLAT
+    # Kârlılık SATIŞA göre (dönemde kesilen satış faturaları − ödenen giderler); nakdin durumu birikmiş nakit,
+    # nakit dayanıklılığı ve alacak göstergeleriyle ayrıca izlenir (büyüyen firmada tahsilat satışın gerisinde kalır).
+    satis_fatura = sum(x["tutar"] for x in tum if x["kod"] == 10 and x["belge_ay"] in aylar)
+    satis = satis_fatura or 1
     gider = sum(t[k] for k in GERCEK_KODLAR - {10})
-    net = t[10] - gider
+    net = satis_fatura - gider
     birikmis = sum((x["tutar"] if x["yon"] == "Giriş" else -x["tutar"]) for x in tum
-                   if x["kod"] in GERCEK_KODLAR and x["tarih"] <= db.BUGUN)
+                   if x["kod"] in GERCEK_KODLAR and x["tarih"] <= db.BUGUN and not _tahsil_edilmemis(x))
     aylik_gider = gider / son_n
     karsilama = birikmis / aylik_gider if aylik_gider else 0
 
@@ -156,8 +178,11 @@ def gostergeler(firma_id, son_n=6):
     cari = cari_ozet(firma_id, 10, son_n)
     en_buyuk_pay = cari[0]["pay"] if cari else 0
     bu_ay = db.BUGUN[:7]  # büyüme: son 3 TAMAMLANMIŞ ayın satışı / önceki 3 ay
-    son3 = sum(x["tutar"] for x in tum if x["kod"] == 10 and x["ay"] in {_ay_ekle(bu_ay, -i) for i in (1, 2, 3)})
-    onceki3 = sum(x["tutar"] for x in tum if x["kod"] == 10 and x["ay"] in {_ay_ekle(bu_ay, -i) for i in (4, 5, 6)})
+    # satış (fatura ayına göre) büyümesi: tahsilat gecikmesi büyümeyi gizlemesin
+    son3 = sum(x["tutar"] for x in tum if x["kod"] == 10
+               and x["belge_ay"] in {_ay_ekle(bu_ay, -i) for i in (1, 2, 3)})
+    onceki3 = sum(x["tutar"] for x in tum if x["kod"] == 10
+                  and x["belge_ay"] in {_ay_ekle(bu_ay, -i) for i in (4, 5, 6)})
     buyume = (son3 - onceki3) / onceki3 if onceki3 else None
 
     def sinirla(x):
@@ -165,7 +190,7 @@ def gostergeler(firma_id, son_n=6):
     bilesenler = [  # (ad, puan, en yüksek, açıklama)
         ("Zamanında ödeme", 25 * zamaninda_oran, 25, f"Son tarihi geçen yükümlülüklerde zamanında ödeme oranı "
                                                     f"%{zamaninda_oran * 100:.0f}"),
-        ("Kârlılık (nakit)", 25 * sinirla(net / satis / 0.15), 25, "Net nakit marjı %15 ve üstü tam puan"),
+        ("Kârlılık", 25 * sinirla(net / satis / 0.15), 25, "Net marj (satış − gider) / satış; %15 ve üstü tam puan"),
         ("Gecikme", max(0, 20 - 7 * geciken), 20, f"{geciken} gecikmiş ödeme (her biri −7)"),
         ("Müşteri dağılımı", 15 * (1 - sinirla((en_buyuk_pay - 0.25) / 0.5)), 15,
          f"En büyük müşterinin payı %{en_buyuk_pay * 100:.0f} (%25'e kadar tam puan)"),
@@ -174,7 +199,8 @@ def gostergeler(firma_id, son_n=6):
     ]
     puan = round(sum(b[1] for b in bilesenler))
     return {
-        "satis": round(t[10], 2), "alis": round(t[58], 2), "gider": round(gider, 2), "net": round(net, 2),
+        "satis": round(satis_fatura, 2), "tahsilat": round(t[10], 2), "alis": round(t[58], 2),
+        "gider": round(gider, 2), "net": round(net, 2),
         "buyume": buyume, "net_marj": net / satis,
         "personel_orani": (t[37] + t[38] + t[52]) / satis, "vergi_orani": (t[53] + t[54]) / satis,
         "zamaninda_oran": zamaninda_oran, "geciken": geciken, "birikmis": round(birikmis, 2),
@@ -194,6 +220,9 @@ def senaryo(firma_id, satis_yuzde=0, alis_yuzde=0, personel_degisim=0, ay_sayisi
     bu_ay = db.BUGUN[:7]
     taban_aylar = [_ay_ekle(bu_ay, -i) for i in (3, 2, 1)]
     ort = {k: sum(x["tutar"] for x in tum if x["kod"] == k and x["ay"] in taban_aylar) / 3 for k in GERCEK_KODLAR}
+    # Tahsilat tabanı = SATIŞ HIZI (fatura ayına göre son 3 ayın ortalaması). İstikrarlı işletmede aylık tahsilat
+    # aylık satışa eşittir; bugünkü açık alacaklar da vadesi geldikçe bu hızla yerine yenisi girerek tahsil edilir.
+    ort[10] = sum(x["tutar"] for x in tum if x["kod"] == 10 and x["belge_ay"] in taban_aylar) / 3
     ort[54] = sum(x["tutar"] for x in tum if x["kod"] == 54 and x["ay"] in _son_aylar(7)[:-1]) / 6
     calisan = db.firma_bilgisi(firma_id).get("calisan_sayisi") or 1
     p_kat = max(0.0, 1 + personel_degisim / calisan)
@@ -205,7 +234,7 @@ def senaryo(firma_id, satis_yuzde=0, alis_yuzde=0, personel_degisim=0, ay_sayisi
     # Başlangıç: bugüne kadar GERÇEKLEŞEN hareketlerin farkı (finansal sağlıktaki "birikmiş nakit" ile aynı tanım);
     # planlı kayıtlar yalnızca ileri aylarda, kendi aylarında eklenir.
     birikmis = sum((x["tutar"] if x["yon"] == "Giriş" else -x["tutar"]) for x in tum
-                   if x["kod"] in GERCEK_KODLAR and x["tarih"] <= db.BUGUN)
+                   if x["kod"] in GERCEK_KODLAR and x["tarih"] <= db.BUGUN and not _tahsil_edilmemis(x))
 
     def ay_neti(senaryo_mu):
         s, a, p = (s_kat, a_kat, p_kat) if senaryo_mu else (1, 1, 1)

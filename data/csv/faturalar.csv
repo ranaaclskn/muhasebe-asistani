@@ -1,88 +1,99 @@
-id,firma_id,tip,karsi_taraf,tarih,tutar_tl,kdv_orani
-FT001,F001,Alış,Ege Un Sanayi (kurgusal),2026-09-09,38817.33,0.2
-FT002,F001,Satış,Kent Market Zinciri (kurgusal),2026-09-06,27237.67,0.1
-FT003,F001,Alış,Marmara Ambalaj (kurgusal),2026-09-21,32650.78,0.2
-FT004,F001,Satış,Lezzet Lokantası (kurgusal),2026-09-20,11407.5,0.1
-FT005,F001,Alış,Ege Un Sanayi (kurgusal),2026-10-02,55258.56,0.2
-FT006,F001,Satış,Kent Market Zinciri (kurgusal),2026-10-17,21486.41,0.1
-FT007,F001,Alış,Marmara Ambalaj (kurgusal),2026-10-09,17970.69,0.2
-FT008,F001,Satış,Lezzet Lokantası (kurgusal),2026-10-24,32453.7,0.1
-FT009,F002,Alış,Bulut Barındırma (kurgusal),2026-09-19,32770.37,0.2
-FT010,F002,Satış,Anadolu Lojistik (kurgusal),2026-09-22,52773.15,0.2
-FT011,F002,Alış,Ofis Kira Hizmetleri (kurgusal),2026-09-09,41012.75,0.2
-FT012,F002,Satış,Mavi Perakende (kurgusal),2026-09-18,28276.71,0.2
-FT013,F002,Alış,Bulut Barındırma (kurgusal),2026-10-02,42913.4,0.2
-FT014,F002,Satış,Anadolu Lojistik (kurgusal),2026-10-04,16288.8,0.2
-FT015,F002,Alış,Ofis Kira Hizmetleri (kurgusal),2026-10-20,10225.03,0.2
-FT016,F002,Satış,Mavi Perakende (kurgusal),2026-10-26,9612.61,0.2
-FT017,F003,Alış,İplik Tedarik (kurgusal),2026-09-10,11036.73,0.2
-FT018,F003,Satış,Moda Butik (kurgusal),2026-09-25,18642.66,0.2
-FT019,F003,Alış,Boya Kimya (kurgusal),2026-09-14,15140.2,0.2
-FT020,F003,Satış,Trend Giyim (kurgusal),2026-09-15,9714.38,0.2
-FT021,F003,Alış,İplik Tedarik (kurgusal),2026-10-27,12807.46,0.2
-FT022,F003,Satış,Moda Butik (kurgusal),2026-10-06,17940.73,0.2
-FT023,F003,Alış,Boya Kimya (kurgusal),2026-10-05,3610.07,0.2
-FT024,F003,Satış,Trend Giyim (kurgusal),2026-10-17,6688.78,0.2
-FT025,F001,Satış,Kent Market Zinciri (kurgusal),2026-05-04,26830.72,0.1
-FT026,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-05-08,31685.0,0.1
-FT027,F001,Satış,Ege Otel Grubu (kurgusal),2026-05-28,31802.83,0.1
-FT028,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-06-03,70793.17,0.1
-FT029,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-06-04,66559.89,0.1
-FT030,F001,Satış,Ege Otel Grubu (kurgusal),2026-06-20,57641.05,0.1
-FT031,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-07-07,56927.84,0.1
-FT032,F001,Satış,Ege Otel Grubu (kurgusal),2026-07-11,81818.16,0.1
-FT033,F001,Satış,Kent Market Zinciri (kurgusal),2026-07-13,70478.47,0.1
-FT034,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-08-03,79359.74,0.1
-FT035,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-08-11,84862.88,0.1
-FT036,F001,Satış,Ege Otel Grubu (kurgusal),2026-08-24,71111.58,0.1
-FT037,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-09-10,92064.65,0.1
-FT038,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-09-19,86160.16,0.1
-FT039,F001,Satış,Ege Otel Grubu (kurgusal),2026-09-23,106439.91,0.1
-FT040,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-10-16,86342.74,0.1
-FT041,F001,Satış,Ege Otel Grubu (kurgusal),2026-10-18,88486.21,0.1
-FT042,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-10-19,87629.78,0.1
-FT043,F001,Satış,Ege Otel Grubu (kurgusal),2026-11-01,58752.07,0.1
-FT044,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-11-08,61851.29,0.1
-FT045,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-11-10,69686.66,0.1
-FT046,F002,Satış,Anadolu Lojistik (kurgusal),2026-05-14,69009.12,0.2
-FT047,F002,Satış,Kuzey Bankacılık (kurgusal),2026-05-20,58771.89,0.2
-FT048,F002,Satış,Delta Sigorta (kurgusal),2026-05-23,62202.09,0.2
-FT049,F002,Satış,Anadolu Lojistik (kurgusal),2026-06-15,137182.79,0.2
-FT050,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-06-22,135533.47,0.2
-FT051,F002,Satış,Delta Sigorta (kurgusal),2026-06-23,100926.77,0.2
-FT052,F002,Satış,Anadolu Lojistik (kurgusal),2026-07-17,122008.99,0.2
-FT053,F002,Satış,Delta Sigorta (kurgusal),2026-07-21,127249.98,0.2
-FT054,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-07-26,109989.73,0.2
-FT055,F002,Satış,Anadolu Lojistik (kurgusal),2026-08-05,156706.98,0.2
-FT056,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-08-20,201481.54,0.2
-FT057,F002,Satış,Delta Sigorta (kurgusal),2026-08-21,142957.21,0.2
-FT058,F002,Satış,Anadolu Lojistik (kurgusal),2026-09-15,139542.79,0.2
-FT059,F002,Satış,Delta Sigorta (kurgusal),2026-09-17,130076.19,0.2
-FT060,F002,Satış,Kuzey Bankacılık (kurgusal),2026-09-25,159216.02,0.2
-FT061,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-10-04,164403.6,0.2
-FT062,F002,Satış,Delta Sigorta (kurgusal),2026-10-15,134515.21,0.2
-FT063,F002,Satış,Kuzey Bankacılık (kurgusal),2026-10-23,169362.8,0.2
-FT064,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-11-02,125814.48,0.2
-FT065,F002,Satış,Kuzey Bankacılık (kurgusal),2026-11-05,120521.67,0.2
-FT066,F002,Satış,Anadolu Lojistik (kurgusal),2026-11-08,105117.74,0.2
-FT067,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-05-01,11952.42,0.2
-FT068,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-05-03,10489.7,0.2
-FT069,F003,Satış,Moda Butik (kurgusal),2026-05-15,10655.38,0.2
-FT070,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-06-09,20663.51,0.2
-FT071,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-06-22,24094.53,0.2
-FT072,F003,Satış,Moda Butik (kurgusal),2026-06-25,25296.74,0.2
-FT073,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-07-16,25116.12,0.2
-FT074,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-07-23,28043.31,0.2
-FT075,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-07-28,30067.66,0.2
-FT076,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-08-10,37054.08,0.2
-FT077,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-08-17,31933.2,0.2
-FT078,F003,Satış,Moda Butik (kurgusal),2026-08-23,38929.32,0.2
-FT079,F003,Satış,Moda Butik (kurgusal),2026-09-10,21177.84,0.2
-FT080,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-09-14,20083.85,0.2
-FT081,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-09-17,21033.25,0.2
-FT082,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-10-02,23909.21,0.2
-FT083,F003,Satış,Moda Butik (kurgusal),2026-10-03,29773.98,0.2
-FT084,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-10-27,24043.46,0.2
-FT085,F003,Satış,Moda Butik (kurgusal),2026-11-05,25544.76,0.2
-FT086,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-11-06,25636.4,0.2
-FT087,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-11-08,17632.4,0.2
+id,firma_id,tip,karsi_taraf,tarih,tutar_tl,kdv_orani,vade_tarihi,odeme_tarihi
+FA027,F001,Satış,Ege Otel Grubu (kurgusal),2026-03-28,30212.69,0.1,2026-05-12,2026-05-30
+FA028,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-04-03,67253.51,0.1,2026-05-03,2026-05-04
+FA029,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-04-04,63231.90,0.1,2026-06-03,2026-06-02
+FA030,F001,Satış,Ege Otel Grubu (kurgusal),2026-04-20,54759.00,0.1,2026-06-04,2026-06-25
+FA046,F002,Satış,Anadolu Lojistik (kurgusal),2026-03-14,65558.66,0.2,2026-04-28,2026-05-01
+FA049,F002,Satış,Anadolu Lojistik (kurgusal),2026-04-15,130323.65,0.2,2026-05-30,2026-06-03
+FA050,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-04-22,128756.80,0.2,2026-06-21,2026-07-17
+FA051,F002,Satış,Delta Sigorta (kurgusal),2026-04-23,95880.43,0.2,2026-05-23,2026-05-23
+FA070,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-04-09,19630.33,0.2,2026-05-09,2026-05-22
+FA071,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-04-22,22889.80,0.2,2026-05-22,2026-05-23
+FA072,F003,Satış,Moda Butik (kurgusal),2026-04-25,24031.90,0.2,2026-05-10,2026-06-04
+FT001,F001,Alış,Ege Un Sanayi (kurgusal),2026-09-09,38817.33,0.2,2026-09-09,2026-09-09
+FT002,F001,Satış,Kent Market Zinciri (kurgusal),2026-09-06,27237.67,0.1,2026-10-06,2026-10-04
+FT003,F001,Alış,Marmara Ambalaj (kurgusal),2026-09-21,32650.78,0.2,2026-09-21,2026-09-21
+FT004,F001,Satış,Lezzet Lokantası (kurgusal),2026-09-20,11407.5,0.1,2026-10-05,2026-10-06
+FT005,F001,Alış,Ege Un Sanayi (kurgusal),2026-10-02,55258.56,0.2,2026-10-02,2026-10-02
+FT006,F001,Satış,Kent Market Zinciri (kurgusal),2026-10-17,21486.41,0.1,2026-11-16,2026-11-15
+FT007,F001,Alış,Marmara Ambalaj (kurgusal),2026-10-09,17970.69,0.2,2026-10-09,2026-10-09
+FT008,F001,Satış,Lezzet Lokantası (kurgusal),2026-10-24,32453.7,0.1,2026-11-08,2026-11-08
+FT009,F002,Alış,Bulut Barındırma (kurgusal),2026-09-19,32770.37,0.2,2026-09-19,2026-09-19
+FT010,F002,Satış,Anadolu Lojistik (kurgusal),2026-09-22,52773.15,0.2,2026-11-06,2026-11-08
+FT011,F002,Alış,Ofis Kira Hizmetleri (kurgusal),2026-09-09,41012.75,0.2,2026-09-09,2026-09-09
+FT012,F002,Satış,Mavi Perakende (kurgusal),2026-09-18,28276.71,0.2,2026-10-18,2026-10-16
+FT013,F002,Alış,Bulut Barındırma (kurgusal),2026-10-02,42913.4,0.2,2026-10-02,2026-10-02
+FT014,F002,Satış,Anadolu Lojistik (kurgusal),2026-10-04,16288.8,0.2,2026-11-18,2026-11-23
+FT015,F002,Alış,Ofis Kira Hizmetleri (kurgusal),2026-10-20,10225.03,0.2,2026-10-20,2026-10-20
+FT016,F002,Satış,Mavi Perakende (kurgusal),2026-10-26,9612.61,0.2,2026-11-25,
+FT017,F003,Alış,İplik Tedarik (kurgusal),2026-09-10,11036.73,0.2,2026-09-10,2026-09-10
+FT018,F003,Satış,Moda Butik (kurgusal),2026-09-25,18642.66,0.2,2026-10-10,2026-11-05
+FT019,F003,Alış,Boya Kimya (kurgusal),2026-09-14,15140.2,0.2,2026-09-14,2026-09-14
+FT020,F003,Satış,Trend Giyim (kurgusal),2026-09-15,9714.38,0.2,2026-10-15,2026-10-16
+FT021,F003,Alış,İplik Tedarik (kurgusal),2026-10-27,12807.46,0.2,2026-10-27,2026-10-27
+FT022,F003,Satış,Moda Butik (kurgusal),2026-10-06,17940.73,0.2,2026-10-21,
+FT023,F003,Alış,Boya Kimya (kurgusal),2026-10-05,3610.07,0.2,2026-10-05,2026-10-05
+FT024,F003,Satış,Trend Giyim (kurgusal),2026-10-17,6688.78,0.2,2026-11-16,2026-11-18
+FT025,F001,Satış,Kent Market Zinciri (kurgusal),2026-05-04,26830.72,0.1,2026-06-03,2026-06-01
+FT026,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-05-08,31685.0,0.1,2026-06-07,2026-06-07
+FT027,F001,Satış,Ege Otel Grubu (kurgusal),2026-05-28,31802.83,0.1,2026-07-12,2026-07-24
+FT028,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-06-03,70793.17,0.1,2026-07-03,2026-07-01
+FT029,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-06-04,66559.89,0.1,2026-08-03,2026-08-01
+FT030,F001,Satış,Ege Otel Grubu (kurgusal),2026-06-20,57641.05,0.1,2026-08-04,2026-08-21
+FT031,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-07-07,56927.84,0.1,2026-08-06,2026-08-05
+FT032,F001,Satış,Ege Otel Grubu (kurgusal),2026-07-11,81818.16,0.1,2026-08-25,2026-09-15
+FT033,F001,Satış,Kent Market Zinciri (kurgusal),2026-07-13,70478.47,0.1,2026-08-12,2026-08-13
+FT034,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-08-03,79359.74,0.1,2026-10-02,2026-09-27
+FT035,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-08-11,84862.88,0.1,2026-09-10,2026-09-09
+FT036,F001,Satış,Ege Otel Grubu (kurgusal),2026-08-24,71111.58,0.1,2026-10-08,
+FT037,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-09-10,92064.65,0.1,2026-11-09,2026-11-09
+FT038,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-09-19,86160.16,0.1,2026-10-19,2026-10-18
+FT039,F001,Satış,Ege Otel Grubu (kurgusal),2026-09-23,106439.91,0.1,2026-11-07,2026-11-19
+FT040,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-10-16,86342.74,0.1,2026-12-15,
+FT041,F001,Satış,Ege Otel Grubu (kurgusal),2026-10-18,88486.21,0.1,2026-12-02,
+FT042,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-10-19,87629.78,0.1,2026-11-18,2026-11-17
+FT043,F001,Satış,Ege Otel Grubu (kurgusal),2026-11-01,58752.07,0.1,2026-12-16,
+FT044,F001,Satış,Anadolu Toptan Gıda (kurgusal),2026-11-08,61851.29,0.1,2027-01-07,
+FT045,F001,Satış,Okul Kantinleri Birliği (kurgusal),2026-11-10,69686.66,0.1,2026-12-10,
+FT046,F002,Satış,Anadolu Lojistik (kurgusal),2026-05-14,69009.12,0.2,2026-06-28,2026-07-02
+FT047,F002,Satış,Kuzey Bankacılık (kurgusal),2026-05-20,58771.89,0.2,2026-06-19,2026-06-18
+FT048,F002,Satış,Delta Sigorta (kurgusal),2026-05-23,62202.09,0.2,2026-06-22,2026-06-21
+FT049,F002,Satış,Anadolu Lojistik (kurgusal),2026-06-15,137182.79,0.2,2026-07-30,2026-08-03
+FT050,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-06-22,135533.47,0.2,2026-08-21,2026-09-26
+FT051,F002,Satış,Delta Sigorta (kurgusal),2026-06-23,100926.77,0.2,2026-07-23,2026-07-23
+FT052,F002,Satış,Anadolu Lojistik (kurgusal),2026-07-17,122008.99,0.2,2026-08-31,2026-09-05
+FT053,F002,Satış,Delta Sigorta (kurgusal),2026-07-21,127249.98,0.2,2026-08-20,2026-08-17
+FT054,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-07-26,109989.73,0.2,2026-09-24,2026-10-28
+FT055,F002,Satış,Anadolu Lojistik (kurgusal),2026-08-05,156706.98,0.2,2026-09-19,2026-09-21
+FT056,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-08-20,201481.54,0.2,2026-10-19,
+FT057,F002,Satış,Delta Sigorta (kurgusal),2026-08-21,142957.21,0.2,2026-09-20,2026-09-20
+FT058,F002,Satış,Anadolu Lojistik (kurgusal),2026-09-15,139542.79,0.2,2026-10-30,2026-11-01
+FT059,F002,Satış,Delta Sigorta (kurgusal),2026-09-17,130076.19,0.2,2026-10-17,2026-10-14
+FT060,F002,Satış,Kuzey Bankacılık (kurgusal),2026-09-25,159216.02,0.2,2026-10-25,2026-10-25
+FT061,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-10-04,164403.6,0.2,2026-12-03,
+FT062,F002,Satış,Delta Sigorta (kurgusal),2026-10-15,134515.21,0.2,2026-11-14,2026-11-14
+FT063,F002,Satış,Kuzey Bankacılık (kurgusal),2026-10-23,169362.8,0.2,2026-11-22,2026-11-23
+FT064,F002,Satış,Şehir Hastanesi Bilişim (kurgusal),2026-11-02,125814.48,0.2,2027-01-01,
+FT065,F002,Satış,Kuzey Bankacılık (kurgusal),2026-11-05,120521.67,0.2,2026-12-05,
+FT066,F002,Satış,Anadolu Lojistik (kurgusal),2026-11-08,105117.74,0.2,2026-12-23,
+FT067,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-05-01,11952.42,0.2,2026-05-31,2026-05-28
+FT068,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-05-03,10489.7,0.2,2026-06-02,2026-06-15
+FT069,F003,Satış,Moda Butik (kurgusal),2026-05-15,10655.38,0.2,2026-05-30,2026-06-28
+FT070,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-06-09,20663.51,0.2,2026-07-09,2026-07-25
+FT071,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-06-22,24094.53,0.2,2026-07-22,2026-07-21
+FT072,F003,Satış,Moda Butik (kurgusal),2026-06-25,25296.74,0.2,2026-07-10,2026-08-21
+FT073,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-07-16,25116.12,0.2,2026-09-14,2026-09-16
+FT074,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-07-23,28043.31,0.2,2026-08-22,2026-09-11
+FT075,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-07-28,30067.66,0.2,2026-08-27,2026-08-24
+FT076,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-08-10,37054.08,0.2,2026-09-09,2026-09-06
+FT077,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-08-17,31933.2,0.2,2026-10-16,2026-10-11
+FT078,F003,Satış,Moda Butik (kurgusal),2026-08-23,38929.32,0.2,2026-09-07,
+FT079,F003,Satış,Moda Butik (kurgusal),2026-09-10,21177.84,0.2,2026-09-25,2026-10-29
+FT080,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-09-14,20083.85,0.2,2026-10-14,2026-10-11
+FT081,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-09-17,21033.25,0.2,2026-10-17,2026-11-06
+FT082,F003,Satış,Kent AVM Mağazaları (kurgusal),2026-10-02,23909.21,0.2,2026-11-01,2026-11-11
+FT083,F003,Satış,Moda Butik (kurgusal),2026-10-03,29773.98,0.2,2026-10-18,2026-11-07
+FT084,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-10-27,24043.46,0.2,2026-12-26,
+FT085,F003,Satış,Moda Butik (kurgusal),2026-11-05,25544.76,0.2,2026-11-20,
+FT086,F003,Satış,Avrupa İhracat Ltd. (kurgusal),2026-11-06,25636.4,0.2,2027-01-05,
+FT087,F003,Satış,Marmara Konfeksiyon (kurgusal),2026-11-08,17632.4,0.2,2026-12-08,

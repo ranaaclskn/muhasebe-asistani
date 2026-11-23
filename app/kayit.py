@@ -457,7 +457,7 @@ def cevapla_kayit(soru, firma_id, niyet):
     sorgu, parametreler = niyet["sorgu"], niyet["parametreler"]
     if sorgu == "tahmin":  # SQL sorgusu değil: geçmiş kayıtlardan Python hesaplar
         return tahmin_cevabi(firma_id, *parametreler)
-    if sorgu in ("saglik", "cari", "senaryo", "uyarilar"):  # panel analizleri (döngüsel import olmasın diye burada)
+    if sorgu in ("saglik", "cari", "senaryo", "uyarilar", "alacak"):  # panel analizleri (döngüsel import olmasın diye burada)
         from app.analiz_sorulari import analiz_cevabi
         return analiz_cevabi(soru, firma_id, sorgu, parametreler)
     if sorgu == "gecikme_orani":  # genel oran / hesaplama sorusu: config'teki resmî oran

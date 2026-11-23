@@ -75,10 +75,10 @@ def test_planli_odeme_30_gun_icindeyse_listede():
     assert "Bilgisayar alımı" in adlar and "Uzak plan" not in adlar
 
 
-def test_pdf_iki_sayfa_ve_gecerli():
+def test_pdf_uc_sayfa_ve_gecerli():
     b = rapor.rapor_pdf("F002", "2026-10")
     assert b.startswith(b"%PDF") and b.rstrip().endswith(b"%%EOF")
-    assert len(re.findall(rb"/Type /Page\b", b)) == 2
+    assert len(re.findall(rb"/Type /Page\b", b)) == 3  # özet · nakit akış ve sağlık · borçlar ve alacaklar
     assert rapor.dosya_adi("F002", "2026-10") == "aylik_rapor_F002_2026-10.pdf"
 
 

@@ -51,7 +51,9 @@ CREATE TABLE faturalar (
     karsi_taraf TEXT,
     tarih TEXT NOT NULL,
     tutar_tl REAL NOT NULL,
-    kdv_orani REAL
+    kdv_orani REAL,
+    vade_tarihi TEXT,                   -- satış: müşterinin son ödeme günü (alacak takibi)
+    odeme_tarihi TEXT                   -- satış: TAHSİL günü; boş = henüz tahsil edilmedi (açık alacak)
 );
 CREATE TABLE belgeler (
     id TEXT PRIMARY KEY,
@@ -154,7 +156,8 @@ def kur():
                               ["id", "firma_id", "tur", "donem", "tutar_tl", "son_odeme_tarihi", "durum", "odeme_tarihi"],
                               sayilari_cevir(["tutar_tl"], float)),
         "faturalar": ekle(con, "faturalar", csv_oku("faturalar.csv"),
-                          ["id", "firma_id", "tip", "karsi_taraf", "tarih", "tutar_tl", "kdv_orani"],
+                          ["id", "firma_id", "tip", "karsi_taraf", "tarih", "tutar_tl", "kdv_orani",
+                           "vade_tarihi", "odeme_tarihi"],
                           sayilari_cevir(["tutar_tl", "kdv_orani"], float)),
         "belgeler": ekle(con, "belgeler", csv_oku("belgeler.csv"),
                          ["id", "firma_id", "tur", "donem", "dosya_adi"]),

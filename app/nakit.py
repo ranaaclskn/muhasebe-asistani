@@ -9,7 +9,7 @@ Kaynaklar gelir–gider grafiğiyle (db.aylik_gelir_gider) aynıdır: ay toplaml
 
 Kontrol (proje klasöründen):  python -m pytest -q tests/test_nakit.py
 """
-from app.config import BUGUN
+from app import db as _db  # "bugün" çağrı anında _db.BUGUN'dan okunur (testler ve analiz modülüyle aynı kaynak)
 from app.db import _firma_kontrol, baglan, planli_islemler, yukumlulukler
 from app.kayit import donem_tr
 
@@ -30,21 +30,26 @@ ALT_KIRILIM = {10, 58}  # bu kodlarda her müşteri / satıcı ayrı satırda g�
 DURUMLAR = ("Gerçekleşti", "Bekliyor", "Gecikti", "Plan")
 
 
-def _hareket(tarih, kod, islem, karsi, tutar, durum, vade=None, kaynak=""):
+def _hareket(tarih, kod, islem, karsi, tutar, durum, vade=None, kaynak="", belge_tarihi=None):
+    """tarih/ay: paranın el değiştirdiği gün. belge_tarihi/belge_ay: işlemin doğduğu gün (satışta FATURA tarihi;
+    satış hızı, büyüme ve müşteri payları buna göre hesaplanır — tahsilat gecikmesinden etkilenmesin)."""
+    belge = belge_tarihi or tarih
     return {"tarih": tarih, "vade": vade or tarih, "ay": tarih[:7], "kod": kod, "kalem": KODLAR[kod][0],
             "yon": KODLAR[kod][1], "islem": islem, "karsi_taraf": karsi, "tutar": round(tutar, 2),
-            "durum": durum, "kaynak": kaynak}
+            "durum": durum, "kaynak": kaynak, "belge_tarihi": belge, "belge_ay": belge[:7]}
 
 
 def hareketler(firma_id):
     """Firmanın tüm para giriş/çıkış hareketleri, tarih sırasıyla (HAREKET sayfası).
-    Tarih = paranın girdiği/çıktığı gün: fatura tarihi, maaş ödeme günü, vergide ödendiyse ödeme günü,
-    ödenmediyse son ödeme günü; vade = son ödeme günü."""
+    Tarih = paranın girdiği/çıktığı gün: satış faturasında TAHSİL günü (tahsil edilmediyse vade günü), alış
+    faturasında fatura tarihi, maaş ödeme günü, vergide ödendiyse ödeme günü, ödenmediyse son ödeme günü.
+    Tahsil edilmemiş satış faturası vergi borcu gibi "Bekliyor" (vadesi gelmedi) / "Gecikti" (vadesi geçti) olur."""
     _firma_kontrol(firma_id)
+    bugun = _db.BUGUN
     con = baglan()
     try:
-        faturalar = con.execute("SELECT id, tip, karsi_taraf, tarih, tutar_tl FROM faturalar WHERE firma_id = ?",
-                                (firma_id,)).fetchall()
+        faturalar = con.execute("SELECT id, tip, karsi_taraf, tarih, tutar_tl, vade_tarihi, odeme_tarihi "
+                                "FROM faturalar WHERE firma_id = ?", (firma_id,)).fetchall()
         maaslar = con.execute(
             "SELECT donem, MAX(odeme_tarihi) AS tarih, COUNT(*) AS kisi, SUM(net_tl) AS net FROM bordrolar "
             "WHERE firma_id = ? GROUP BY donem", (firma_id,)).fetchall()
@@ -54,12 +59,21 @@ def hareketler(firma_id):
     liste = []
     for f in faturalar:
         satis = f["tip"] == "Satış"
-        liste.append(_hareket(f["tarih"], 10 if satis else 58, f"{f['tip']} faturası {f['id']}",
+        tarih, vade, durum = f["tarih"], f["vade_tarihi"] or f["tarih"], None
+        if satis and f["vade_tarihi"]:  # alacak takibi: para tahsil günü girer
+            if f["odeme_tarihi"] and f["odeme_tarihi"] <= bugun:
+                tarih, durum = f["odeme_tarihi"], "Gerçekleşti"
+            elif f["tarih"] > bugun:
+                tarih, durum = vade, "Plan"  # henüz kesilmemiş (ileri tarihli) fatura
+            else:
+                tarih, durum = vade, ("Gecikti" if vade < bugun else "Bekliyor")
+        liste.append(_hareket(tarih, 10 if satis else 58, f"{f['tip']} faturası {f['id']}",
                               (f["karsi_taraf"] or "").replace(" (kurgusal)", ""), f["tutar_tl"],
-                              "Gerçekleşti" if f["tarih"] <= BUGUN else "Plan", kaynak=f["id"]))
+                              durum or ("Gerçekleşti" if f["tarih"] <= bugun else "Plan"), vade=vade, kaynak=f["id"],
+                              belge_tarihi=f["tarih"]))
     for m in maaslar:
         liste.append(_hareket(m["tarih"], 37, f"{donem_tr(m['donem'])} maaş ödemesi ({m['kisi']} çalışan)",
-                              "Çalışanlar", m["net"], "Gerçekleşti" if m["tarih"] <= BUGUN else "Plan",
+                              "Çalışanlar", m["net"], "Gerçekleşti" if m["tarih"] <= bugun else "Plan",
                               kaynak=f"bordro {m['donem']}"))
     for y in yukumlulukler(firma_id):
         tarih = y["odeme_tarihi"] or y["son_odeme_tarihi"]
@@ -84,7 +98,7 @@ def donem_aylari(liste, son_n=None):
     Arada hareketi olmayan ay da sütun olarak gösterilir (boşluk görünür olsun)."""
     if not liste:
         return []
-    bu_ay = BUGUN[:7]
+    bu_ay = _db.BUGUN[:7]
     ilk, son = min(h["ay"] for h in liste), max(max(h["ay"] for h in liste), bu_ay)
     ay = _ay_ekle(bu_ay, -(son_n - 1)) if son_n else ilk
     aylar = []

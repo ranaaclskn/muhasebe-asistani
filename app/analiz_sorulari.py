@@ -17,6 +17,11 @@ _SAYI = r"(\d+|bir|iki|üç|dört|beş|altı|yedi|sekiz|dokuz|on)"
 KOSUL = (r"\w+(?:ırsa|irse|ursa|ürse|arsa|erse)\w*|\w+(?:sam|sem|sak|sek)\b|\bolsa\b|\bsenaryo|"
          r"\bne olur\b|varsay")
 DEGISKEN = r"satış|ciro|gelir|hasılat|maliyet|alış|tedarik|hammadde|satıcı|personel|çalışan|eleman|işçi|kişi"
+ALACAK_KALIBI = (r"vadesi (?:geç|dol)\w* (?:alacak|fatura|tahsilat)|(?:alacak|fatura)\w* vadesi (?:geç|dol)|"
+                 r"tahsil edilme(?:miş|yen)|tahsil edeme|açık (?:fatura|alacak)|ödenmemiş satış|"
+                 r"kim(?:ler)? borçlu|borçlu (?:müşteri|olan)|bana borcu|borcu olan müşteri|"
+                 r"alacak yaşlandır|alacak devir|ortalama tahsil|tahsil süre|tahsilat süre")
+MUSTERI_ODEME = r"kaç günde|ne kadar sürede|geç öd|zamanında öd|ödemiyor|ödemeyen|ödemedi|borçlu|borcu"
 
 
 def _kucuk(metin):
@@ -37,6 +42,11 @@ def analiz_kalibi(soru):
     if re.search(r"(?:finansal|mali)\s+(?:sağlık|durum)|sağlık puan|puanım|puanı\b|skor|nasıl gidiyor|"
                  r"genel durum|şirketimin durumu|işletmemin durumu|firmamın durumu", s):
         return {"niyet": "kayit", "sorgu": "saglik", "parametreler": [], "duzeltme": "finansal sağlık kalıbı"}
+    # ALACAK (fatura alacakları): vadesi geçmiş / tahsil edilmemiş faturalar, borçlu müşteri, tahsil süresi.
+    # "Alacaklarım ne kadar", "tahsilat bekliyorum" gibi genel sorular kullanıcının PLANLI tahsilatlarıdır
+    # (niyet.py _planli_kalibi); burada yalnızca açıkça fatura alacağını soran kalıplar var.
+    if re.search(ALACAK_KALIBI, s) or (re.search(r"müşteri", s) and re.search(MUSTERI_ODEME, s)):
+        return {"niyet": "kayit", "sorgu": "alacak", "parametreler": [], "duzeltme": "alacak kalıbı"}
     # CARİ: en büyük müşteri / satıcı, müşteri payları, cari ekstre (tahsilat BEKLEME soruları planlı kayıttır)
     if re.search(r"müşteri|tedarikçi|satıcı|\bcari", s) and not re.search(r"tahsil|alacak|bekliyor|bekledi", s) \
             and re.search(r"en çok|en fazla|en büyük|en az|hangi|kim|pay|ekstre|listele|sırala|dağılım|kaç|"
@@ -104,7 +114,7 @@ def _ay_adi(ay):
 
 ONERI = {
     "Zamanında ödeme": "Son tarihi geçen yükümlülükleri kapatmak bu bileşeni hemen yükseltir.",
-    "Kârlılık (nakit)": "Gider kalemlerini (özellikle satıcı ve personel) satışla birlikte izleyin; %15 net marj hedeflenir.",
+    "Kârlılık": "Gider kalemlerini (özellikle satıcı ve personel) satışla birlikte izleyin; %15 net marj hedeflenir.",
     "Gecikme": "Gecikmiş her ödeme 7 puan düşürür ve gecikme zammı işletir; önce bunları ödeyin.",
     "Müşteri dağılımı": "Satışların tek müşteride yoğunlaşması riskli; en büyük müşterinin payını %25'in altına indirmeyi hedefleyin.",
     "Nakit dayanıklılığı": "Birikmiş nakdin en az 3 aylık gideri karşılaması önerilir.",
@@ -120,7 +130,7 @@ def saglik_cevabi(firma_id):
     oneriler = "\n".join(f"- **{a}** ({_ondalik(p)}/{m}): {ONERI[a]}" for a, p, m, _ in zayif)
     buyume = "—" if g["buyume"] is None else ("+" if g["buyume"] > 0 else "−") + _yuzde(abs(g["buyume"]))
     metin = (f"Finansal sağlık puanınız **{g['puan']} / 100 ({g['etiket']})**.\n\n{bilesenler}\n\n"
-             f"**Göstergeler (son {g['ay_sayisi']} ay):** net nakit marjı {_yuzde(g['net_marj'])}, gelir büyümesi "
+             f"**Göstergeler (son {g['ay_sayisi']} ay):** net marj {_yuzde(g['net_marj'])}, gelir büyümesi "
              f"{buyume}, personel gider oranı {_yuzde(g['personel_orani'])}, vergi yükü {_yuzde(g['vergi_orani'])}, "
              f"zamanında ödeme {_yuzde(g['zamaninda_oran'])}, birikmiş nakit {tl(g['birikmis'])} "
              f"({_ondalik(g['karsilama_ay'])} aylık gider).\n\n**Puanı en çok düşüren iki alan:**\n{oneriler}\n\n"
@@ -218,7 +228,48 @@ def uyari_cevabi(firma_id):
     return {"cevap": metin, "kaynaklar": ["analiz: uyarılar"], "satirlar": liste, "yontem": "analiz"}
 
 
+def alacak_cevabi(firma_id, soru):
+    """Açık alacaklar ve tahsil performansı (app/alacak.py); rakamlar paneldeki Alacaklar sekmesiyle aynı."""
+    from app.alacak import acik_alacaklar, musteri_performansi, ozet
+    from app.kayit import tarih_tr
+    o, acik = ozet(firma_id), acik_alacaklar(firma_id)
+    s = _kucuk(soru)
+    ort = "—" if o["ort_tahsil_gun"] is None else f"{o['ort_tahsil_gun']:.0f} gün"
+    if re.search(r"kaç gün|ne kadar süre|süre|geç öd|zamanında|ortalama", s):  # tahsil PERFORMANSI sorusu
+        mp = [m for m in musteri_performansi(firma_id) if m["ort_tahsil_gun"] is not None]
+        mp.sort(key=lambda m: (-m["ort_gecikme_gun"], -m["ort_tahsil_gun"]))
+        metin = (f"Müşterileriniz faturayı **ortalama {ort}** içinde ödüyor. Vadesinde ya da önce tahsil edilen "
+                 f"fatura oranı: %{(o['zamaninda_oran'] or 0) * 100:.0f}.\n\n"
+                 "Müşteri bazında (vadeye göre en geç ödeyen başta):\n" + "\n".join(
+                     f"- {m['musteri']}: vadeden sonra ortalama {m['ort_gecikme_gun']:.0f} gün "
+                     f"(faturadan tahsile {m['ort_tahsil_gun']:.0f} gün)" + (f" · vadesi geçen {_tl(m['vadesi_gecen'])}"
+                                                       if m["vadesi_gecen"] else "") for m in mp))
+        kaynaklar = ["analiz: alacaklar"]
+    else:
+        gecen = [a for a in acik if a["gecikme_gun"] > 0]
+        metin = (f"Tahsil edilmemiş **{o['acik_adet']} satış faturanız** var, toplam **{_tl(o['acik_tutar'])}**."
+                 if acik else "Tahsil edilmemiş satış faturanız yok.")
+        if gecen:
+            metin += (f" Bunların {len(gecen)} tanesinin vadesi geçti ({_tl(o['vadesi_gecen_tutar'])}):\n\n"
+                      + "\n".join(f"- **{a['musteri']}** · {a['id']}: {_tl(a['tutar'])}, vade {tarih_tr(a['vade'])} "
+                                  f"— {a['gecikme_gun']} gün gecikti" for a in gecen)
+                      + "\n\nGeciken müşterileri arayıp ödeme tarihi almanızı öneririm.")
+        elif acik:
+            metin += " Vadesi geçen alacak yok."
+        bekleyen = [a for a in acik if a["gecikme_gun"] <= 0]
+        if bekleyen:
+            metin += (f"\n\nVadesi gelmemiş {len(bekleyen)} fatura: {_tl(round(sum(a['tutar'] for a in bekleyen), 2))}"
+                      f" (en yakın vade {tarih_tr(min(a['vade'] for a in bekleyen))}).")
+        if acik:
+            metin += (f"\n\nMüşterileriniz ortalama {ort} içinde ödüyor." if o["ort_tahsil_gun"] is not None else "\n")
+            metin += " Ayrıntı: panelin **Alacaklar** sekmesi."
+        kaynaklar = [a["id"] for a in acik] or ["analiz: alacaklar"]
+    return {"cevap": metin, "kaynaklar": kaynaklar, "satirlar": acik, "yontem": "analiz"}
+
+
 def analiz_cevabi(soru, firma_id, sorgu, parametreler):
+    if sorgu == "alacak":
+        return alacak_cevabi(firma_id, soru)
     if sorgu == "saglik":
         return saglik_cevabi(firma_id)
     if sorgu == "cari":

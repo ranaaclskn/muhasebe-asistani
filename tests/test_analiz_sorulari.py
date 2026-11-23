@@ -87,7 +87,8 @@ def test_senaryo_cevabi_rakamlari_senaryo_fonksiyonuyla_ayni():
     from app.kayit import tl
     r = analiz_cevabi("Satışlar %10 düşerse 6 ay sonra?", "F003", "senaryo", [])
     s = senaryo("F003", -10, 0, 0, 6)
-    assert tl(s["aylar"][-1]["kumulatif_senaryo"]) in r["cevap"] and "satışlar %10 azalır" in r["cevap"]
+    son = s["aylar"][-1]["kumulatif_senaryo"]  # eksi tutarlar cevapta tipografik eksiyle (−) yazılır
+    assert ("−" if son < 0 else "") + tl(abs(son)) in r["cevap"] and "satışlar %10 azalır" in r["cevap"]
     assert "−" + tl(abs(s["fark"])) in r["cevap"]  # eksi fark düzgün eksi işaretiyle
 
 
